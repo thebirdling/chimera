@@ -1,0 +1,8 @@
+click>=8.0.0
+pandas>=1.5.0
+numpy>=1.24.0
+scikit-learn>=1.2.0
+joblib>=1.2.0
+pyyaml>=6.0
+python-dateutil>=2.8.0
+rich>=13.0.0

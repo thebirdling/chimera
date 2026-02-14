@@ -1,0 +1,90 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "chimera"
+version = "0.2.0"
+description = "Behavioral anomaly detection for authentication logs"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Security",
+    "Topic :: System :: Logging",
+    "Typing :: Typed",
+]
+keywords = ["security", "anomaly-detection", "authentication", "siem", "behavioral-analysis"]
+
+dependencies = [
+    "click>=8.0.0",
+    "pandas>=1.5.0",
+    "numpy>=1.24.0",
+    "scikit-learn>=1.2.0",
+    "joblib>=1.2.0",
+    "pyyaml>=6.0",
+    "python-dateutil>=2.8.0",
+]
+
+[project.optional-dependencies]
+rich = [
+    "rich>=13.0.0",
+]
+full = [
+    "rich>=13.0.0",
+    "pyyaml>=6.0",
+]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "black>=23.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0",
+    "rich>=13.0.0",
+]
+
+[project.scripts]
+chimera = "chimera.cli:cli"
+
+[project.urls]
+Homepage = "https://github.com/thebirdling/chimera"
+Documentation = "https://github.com/thebirdling/chimera#readme"
+Repository = "https://github.com/thebirdling/chimera"
+Issues = "https://github.com/thebirdling/chimera/issues"
+Changelog = "https://github.com/thebirdling/chimera/blob/main/CHANGELOG.md"
+
+[tool.setuptools.packages.find]
+include = ["chimera*"]
+
+[tool.black]
+line-length = 100
+target-version = ["py310"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+select = ["E", "F", "I", "N", "W", "UP", "B", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
