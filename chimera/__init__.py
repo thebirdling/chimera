@@ -6,7 +6,7 @@ learning and deterministic rules to identify suspicious authentication
 patterns without requiring labeled data.
 """
 
-__version__ = "0.5.0"
+__version__ = "0.5.1"
 __author__ = "Chimera Contributors"
 __license__ = "MIT"
 

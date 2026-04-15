@@ -29,6 +29,27 @@ from chimera import __version__
 
 logger = logging.getLogger("chimera")
 
+_FIRE_BANNER = [
+    r"   (  )   (   )  )",
+    r"    ) (   )  (  (",
+    r"    ( )  (    ) )",
+    r"    _____________",
+    r"   <_____________> ___",
+    r"   |             |/ _ \\",
+    r"   |   CHIMERA   | | | |",
+    r"   |   v0.5.1    | |_| |",
+    r"___|             |\\___/",
+    r"/    \___________/    \\",
+    r"\\_____________________/",
+]
+
+_FIRE_FRAMES = [
+    " .  (  ) ",
+    " .'. )(. ",
+    " : .'.:  ",
+    " '.: :'  ",
+]
+
 
 def _setup_logging(verbose: bool) -> None:
     level = logging.DEBUG if verbose else logging.INFO
@@ -49,6 +70,36 @@ def _echo_header(title: str) -> None:
         click.echo(f"\n{'=' * 50}")
         click.echo(f"  {title}")
         click.echo(f"{'=' * 50}\n")
+
+
+def _echo_brand_banner(title: str, subtitle: str = "") -> None:
+    """Render Chimera's branded startup banner."""
+    click.echo()
+    for line in _FIRE_BANNER:
+        click.echo(f"  {line}")
+    click.echo(f"  {title}")
+    if subtitle:
+        click.echo(f"  {subtitle}")
+    click.echo()
+
+
+def _animate_stage(label: str, steps: int = 10, delay: float = 0.03) -> None:
+    """Render a tiny ASCII loader without slowing normal CLI use too much."""
+    if not sys.stdout.isatty():
+        click.echo(f"[*] {label}...")
+        return
+
+    for idx in range(steps):
+        frame = _FIRE_FRAMES[idx % len(_FIRE_FRAMES)]
+        click.echo(f"\r{frame} {label}...", nl=False)
+        time.sleep(delay)
+    click.echo(f"\r[OK] {label}".ljust(len(label) + 12))
+
+
+def _command_intro(title: str, subtitle: str = "") -> None:
+    """Show a branded intro for interactive commands."""
+    _echo_brand_banner(title, subtitle)
+    _animate_stage("warming the furnace")
 
 
 def _echo_table(headers: list[str], rows: list[list[str]], title: str = "") -> None:
@@ -610,7 +661,7 @@ def init(output: str) -> None:
     """Generate a starter configuration file with documented defaults."""
     from chimera.config import generate_default_config
 
-    _echo_header("Chimera Init")
+    _command_intro("Chimera Init", "offline-first project bootstrap")
     path = generate_default_config(output)
     click.echo(f"[+] Default configuration generated at: {path}")
     click.echo("Edit this file to customize Chimera's behavior.")
@@ -641,7 +692,7 @@ def train(
     from chimera.feature_engineering import FeatureEngineer
     from chimera.model import AnomalyDetector, ModelConfig
 
-    _echo_header("Chimera Train")
+    _command_intro("Chimera Train", "forging a detector from local authentication history")
 
     # Determine detector type
     cfg = ctx.obj.get("config")
@@ -726,7 +777,7 @@ def detect(
     from chimera.model import AnomalyDetector
     from chimera.scoring import AnomalyScorer
 
-    _echo_header("Chimera Detect")
+    _command_intro("Chimera Detect", "scoring identity behavior against a trained local model")
 
     config = ctx.obj.get("config")
 
@@ -843,7 +894,7 @@ def report(
     from chimera.reporting import ReportGenerator
     from chimera.scoring import AnomalyResult, UserSummary
 
-    _echo_header("Chimera Report")
+    _command_intro("Chimera Report", "shaping findings into analyst-ready artifacts")
 
     click.echo(f"[*] Loading results from {results_path}...")
     with open(results_path, "r", encoding="utf-8") as f:
@@ -905,7 +956,7 @@ def rules(ctx: click.Context, list_rules: bool, test_file: Optional[str]) -> Non
     """List, validate, and test detection rules."""
     from chimera.rules.engine import RuleEngine
 
-    _echo_header("Chimera Rules")
+    _command_intro("Chimera Rules", "inspecting deterministic guardrails and comparisons")
 
     engine = RuleEngine()
     engine.load_builtin_rules()
@@ -972,7 +1023,7 @@ def correlate(
     from chimera.data_loader import AuthLogLoader
     from chimera.correlator import EventCorrelator
 
-    _echo_header("Chimera Correlate")
+    _command_intro("Chimera Correlate", "surfacing cross-user coordination and overlap")
 
     click.echo(f"[*] Loading data from {input_path}...")
     loader = AuthLogLoader()
@@ -1041,7 +1092,7 @@ def export_cmd(
     from chimera.rules.engine import RuleMatch as RuleMatchDef
     from chimera.exporters import CEFExporter, SyslogExporter, STIXExporter
 
-    _echo_header("Chimera Export")
+    _command_intro("Chimera Export", "packaging results for downstream security tooling")
 
     click.echo(f"[*] Loading results from {results_path}...")
     with open(results_path, "r", encoding="utf-8") as f:
@@ -1083,7 +1134,7 @@ def baseline(ctx: click.Context, input_path: str, output: str) -> None:
     from chimera.data_loader import AuthLogLoader
     from chimera.feature_engineering import FeatureEngineer
 
-    _echo_header("Chimera Baseline")
+    _command_intro("Chimera Baseline", "building local identity reference behavior")
 
     click.echo(f"[*] Loading data from {input_path}...")
     loader = AuthLogLoader()
@@ -1159,7 +1210,7 @@ def watch(
     from chimera.model import AnomalyDetector
     from chimera.scoring import AnomalyScorer
 
-    _echo_header("Chimera Watch")
+    _command_intro("Chimera Watch", "standing by for fresh authentication evidence")
 
     config = ctx.obj.get("config")
 
@@ -1226,7 +1277,7 @@ def watch(
 @click.argument("model_path", type=click.Path(exists=True))
 def info(model_path: str) -> None:
     """Show metadata about a trained model."""
-    _echo_header("Chimera Model Info")
+    _command_intro("Chimera Model Info", "inspecting a verified local detector artifact")
 
     detector = _load_detector_securely(model_path, config=None)
     info_data = detector.get_model_info()
@@ -1282,7 +1333,7 @@ def run_cmd(
     model_path: Optional[str],
     output_dir: str,
 ) -> None:
-    """Run the full v0.5 engine pipeline from a config file.
+    """Run the full v0.5.1 engine pipeline from a config file.
 
     Loads the config, runs feature engineering, fits the normalization
     engine (or loads a pre-trained one), scores all events using the
@@ -1296,7 +1347,7 @@ def run_cmd(
     import time
     from pathlib import Path
 
-    _echo_header("Chimera v0.5 — Run")
+    _command_intro("Chimera v0.5.1 Run", "structured identity-behavior reasoning in motion")
 
     # 1. Load config
     try:
@@ -1530,7 +1581,7 @@ def bench(
     seed: int,
     output_dir: str,
 ) -> None:
-    """Benchmark the v0.5 engine against a naive baseline using synthetic injection.
+    """Benchmark the v0.5.1 engine against a naive baseline using synthetic injection.
 
     Loads real events, injects synthetic anomalies for ground truth, then
     runs two pipelines side by side:
@@ -1547,7 +1598,7 @@ def bench(
     import time
     from pathlib import Path
 
-    _echo_header("Chimera v0.5 — Benchmark")
+    _command_intro("Chimera v0.5.1 Benchmark", "measuring lift against controlled identity attacks")
 
     # Load config
     try:
@@ -1652,7 +1703,7 @@ def bench_lanl(
     output_dir: str,
 ) -> None:
     """Benchmark Chimera on a streamed slice of the LANL/CERT auth dataset."""
-    _echo_header("Chimera v0.5 — LANL Benchmark")
+    _command_intro("Chimera v0.5.1 LANL Benchmark", "running publishable offline benchmark slices")
     try:
         from chimera.config import ChimeraConfig
         from chimera.data_loader import AuthLogLoader

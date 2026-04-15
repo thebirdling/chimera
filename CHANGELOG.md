@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] - 2026-04-15
+
+### Added
+
+- **Branded CLI presentation**: introduced fire-inspired ASCII banners and lightweight command-stage animations so Chimera feels deliberate during `train`, `detect`, `run`, `bench`, and `bench-lanl`.
+- **Expanded documentation set**: added dedicated architecture, evaluation, and CLI/output guides to make the repo easier to navigate as a research platform.
+- **README presentation refresh**: restored release imagery, status badges, architecture overview, and supporter section while aligning the copy with the current identity-centric research thesis.
+
+### Changed
+
+- **Release versioning**: project metadata, packaging, and runtime version are now aligned at `0.5.1`.
+- **Repository hygiene**: `.gitignore` now covers temporary benchmark directories, local outputs, Python cache artifacts, Rust build output, and transient logs.
+- **Research docs**: system map and research brief were expanded so the public-facing documentation better matches the actual subsystem depth and evaluation story.
+
 ## [0.5.0] - 2026-04-15
 
 ### Added

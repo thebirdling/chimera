@@ -1,82 +1,242 @@
-# Chimera Research Brief: Identity-Centric Behavioral Research Under Constrained Infrastructure
+# Chimera Research Brief
 
-**Version**: 0.5.0  
+**Version**: 0.5.1  
 **Date**: April 2026
 
-## 1. Introduction
+## 1. Abstract
 
-The proliferation of cloud-native SIEMs (Security Information and Event Management) has created a dependency on external APIs and centralized data lakes for threat detection. While effective for enterprise environments, these solutions are often unsuitable for high-security, air-gapped, or forensic research contexts where data sovereignty and offline operation are paramount.
+Chimera is an offline-first research framework for authentication and identity-behavior anomaly analysis. The project investigates how unsupervised detectors, deterministic rules, robust ensemble scoring, and structured identity reasoning can be combined in constrained environments where network enrichment, centralized telemetry, and dense labels are unavailable or undesirable.
 
-This brief outlines the design and implementation of **Chimera**, an offline-first research framework for identity and authentication anomaly analysis. Chimera v0.5.0 investigates how unsupervised detectors, deterministic rules, sequence-aware identity reasoning, and campaign heuristics can be combined under infrastructure and reproducibility constraints.
+Chimera v0.5.1 advances the project from robust anomaly scoring toward **structured identity-behavior reasoning**. The current system emphasizes deterministic sequence and relationship signals, coordinated identity attack heuristics, explainable outputs, and reproducible benchmark workflows.
 
-## 2. Infrastructure Constraints
+## 2. Problem Statement
 
-Chimera was designed under strict constraints to model specific high-security scenarios:
-- **Zero Network Egress**: No API calls for threat intelligence or model updates.
-- **Local Compute Only**: All processing must run on a standard researcher workstation.
-- **No Labeled Data**: Detection must rely on unsupervised learning and heuristic rules, as attack labels are rarely available in real-time.
+Most contemporary security analytics stacks assume:
 
-These constraints necessitated a feature-rich, ensemble-based approach to compensate for the lack of global threat intelligence feeds.
+- cloud enrichment is available
+- internet egress is acceptable
+- large telemetry lakes are normal
+- labels or prior detections can bootstrap the system
 
-## 3. Behavioral Feature Engineering
+Those assumptions break down in:
 
-We implemented a robust feature extraction pipeline transforming raw authentication logs into behavioral vectors spanning temporal rhythm, geography, device reuse, session continuity, coordination, and campaign structure. Key innovations in v0.5.0 include:
+- air-gapped environments
+- forensic research settings
+- sensitive local investigations
+- constrained infrastructure environments
+- early-stage prototyping where reproducibility matters more than platform breadth
 
-### 3.1 Entropy-Based Features
-To capture the randomness of a user's access patterns, we compute the Shannon entropy of their IP, device, and country distributions over a sliding window.
-$$ H(X) = -\sum_{i=1}^n P(x_i) \log_2 P(x_i) $$
-Sudden spikes in entropy often correlate with credential compromise or bot activity.
+Chimera asks a narrower but sharper question:
 
-### 3.2 Peer-Group Deviation
-Unlike standard UEBA which compares a user to their own history, Chimera introduces a global "peer group" baseline. We measure the deviation of a user's velocity (events/hour) and timing against the global cohort mean.
-$$ Z_{peer} = \frac{x_{user} - \mu_{global}}{\sigma_{global}} $$
-This helps detect compromised accounts behaving "normally" for themselves but anomalously compared to the organization.
+> how far can we push identity and authentication anomaly research using local, reproducible, adversarially robust methods?
 
-### 3.3 Structured Identity Reasoning
+## 3. Design Principles
 
-The current research phase adds deterministic identity primitives:
+### 3.1 Offline-First
 
-- session cadence and fingerprint drift
-- shared IP, device, and ASN relationship features
-- password-spraying and low-and-slow campaign heuristics
-- ordered takeover progression from login to token reuse to privileged action
+Core workflows must run locally and remain useful without external graph services, live threat feeds, or cloud feature stores.
 
-These features are additive to the baseline detectors and remain fully offline and reproducible.
+### 3.2 Identity-Focused
 
-## 4. Ensemble Modeling Strategy
+The primary subject is not generic telemetry. It is authentication and identity behavior:
 
-Single-model anomaly detection often suffers from high false positives (Isolation Forest) or insensitivity to local density clusters (LOF). Chimera implements a heterogeneous ensemble:
+- session continuity
+- login cadence
+- device drift
+- geography shifts
+- cross-account overlap
+- coordinated account abuse
 
-1.  **Isolation Forest**: Efficient for global outliers.
-2.  **Local Outlier Factor (LOF)**: Effective for local density anomalies.
-3.  **Ensemble Voting**:
-    - **Normalization**: Raw scores from constituent models are robustly scaled to $[0, 1]$ using MinMax scaling fitted on the training distribution.
-    - **Dynamic Thresholding**: The decision boundary is not fixed but determined dynamically by the `contamination` percentile of the ensemble score distribution.
+### 3.3 Adversarially Robust
 
-This voting mechanism aims to reduce noise while maintaining high recall for distinct anomaly types.
+Integrity, persistence safety, contamination handling, and threshold stability are part of the system design rather than afterthoughts.
 
-## 5. Offline Threat Intelligence
+### 3.4 Research-Grade and Reproducible
 
-To enrich detections without network access, Chimera introduces a local provider interface (`chimera.threat_intel`). This module loads static indicators (IP/ASN blocklists) from flat files into memory sets. These are then joined with authentication events during the feature engineering phase, treating "known bad" status as a strong feature signal rather than a simple filter.
+Deterministic seeds, controlled synthetic injections, and comparable reporting matter because Chimera is intended to support defensible claims rather than vague product language.
 
-## 6. Experimental Observations
+## 4. Current Technical Stack
 
-Initial verification on synthetic datasets and LANL-style benchmark slices demonstrated:
-- **Robustness**: the ensemble-plus-identity stack detects session hijack, MFA bypass, password spraying, and coordinated campaign patterns more reliably than detector-only baselines.
-- **Determinism**: Fixed random seeding ensured identical anomaly scores across repeated runs, a critical requirement for forensic reproducibility.
-- **Explainability**: event-level identity reasons and benchmark markdown reporting provide clear research examples for analyst review and publication workflows.
+Chimera’s research architecture now consists of five interacting layers:
 
-## 7. Limitations
+1. local ingestion into a canonical authentication-event schema
+2. behavioral and identity feature engineering
+3. unsupervised baseline detectors
+4. robust ensemble scoring and thresholding
+5. sequence, relationship, and campaign-aware identity reasoning
 
-- **Compute Scaling**: LOF is $O(n^2)$ complexity, limiting scalability on large datasets without subsampling.
-- **Static Rules**: the rule engine still requires manual configuration updates.
-- **Cold Start**: New users with insufficient history may generate false positives until baselines stabilize (approx. 50 events).
+This means Chimera no longer treats every authentication event as an isolated point. It increasingly treats events as parts of:
 
-## 8. Future Work
+- sessions
+- user-level behavioral sequences
+- shared-entity relationship structures
+- local campaign patterns
 
-- **Sequence Modeling**: extend the current deterministic sequence layer before considering heavier learned models.
-- **Active Learning**: Introducing a feedback loop for analysts to label anomalies, enabling semi-supervised refinement.
-- **Graph correlation**: deepen the current local structural graph signals without requiring external graph infrastructure.
+## 5. Behavioral and Identity Features
 
----
-*For technical details and contribution guidelines, refer to the [GitHub Repository](https://github.com/thebirdling/chimera).*
+### 5.1 Baseline Behavioral Features
+
+Chimera already includes:
+
+- temporal rhythm features
+- event velocity
+- entropy-based indicators for IP and geography diversity
+- peer-group deviation features
+- impossible-travel style geography indicators
+- session and device continuity signals
+
+These remain foundational because the identity layer is additive, not a replacement.
+
+### 5.2 Structured Identity Features
+
+The current phase adds deterministic identity reasoning primitives:
+
+- session cadence and short-range ordering
+- burst and replay-style session behavior
+- fingerprint drift within session context
+- shared IP and shared device overlap
+- ASN concentration
+- synchronized cross-user activity
+- fan-out and multi-account infrastructure reuse
+- password-spraying indicators
+- low-and-slow coordinated abuse indicators
+- ordered takeover progression from initial session establishment through reuse and privileged action
+
+The design choice is deliberate: Chimera prefers deterministic, inspectable features over deep neural sequence models at this stage.
+
+## 6. Modeling Strategy
+
+### 6.1 Baseline Detector Layer
+
+Chimera uses unsupervised baselines such as:
+
+- Isolation Forest
+- Local Outlier Factor
+
+These provide pointwise anomaly signals with complementary strengths.
+
+### 6.2 Robust Ensemble Layer
+
+Because raw detector outputs are unstable in constrained settings, Chimera uses:
+
+- score normalization
+- ensemble voting
+- dynamic thresholding
+- disagreement and instability diagnostics
+
+This layer is essential to making baseline detector outputs comparable and reproducible.
+
+### 6.3 Identity Reasoning Layer
+
+The identity layer consumes feature outputs and emits:
+
+- `identity_sequence_score`
+- `identity_relationship_score`
+- `identity_campaign_score`
+- `identity_takeover_sequence_score`
+- `identity_takeover_score`
+
+It also emits human-readable reasons so findings are reviewable by analysts and usable in research writeups.
+
+## 7. Why Deterministic Sequence and Graph Reasoning First
+
+The project deliberately avoids jumping straight to deep learning for three reasons:
+
+### 7.1 Defensibility
+
+Deterministic signals are easier to reason about, ablate, compare, and publish.
+
+### 7.2 Infrastructure Fit
+
+Local feature-driven sequence and graph statistics fit the project’s constrained-infrastructure thesis better than heavy training loops or external graph systems.
+
+### 7.3 Interpretability
+
+Human-readable reasons matter for both analysts and research communication. Deterministic features support this naturally.
+
+## 8. Evaluation Methodology
+
+Chimera’s evaluation harness is now identity-centric rather than only generic anomaly-centric.
+
+Supported synthetic attack families include:
+
+- session hijack
+- MFA bypass style drift
+- password spraying
+- low-and-slow credential abuse
+- coordinated multi-account campaigns
+- temporal jitter
+
+Reporting emphasizes:
+
+- detection lift
+- false-positive behavior
+- threshold stability
+- contamination-shift robustness
+- explainability examples
+
+LANL-style workflows and Markdown benchmark artifacts are included so experiments can be rerun and reviewed without needing custom post-processing.
+
+## 9. Security and Operational Discipline
+
+Chimera v0.5.1 includes several important safety boundaries:
+
+- model loading requires integrity verification by default
+- runtime paths preserve local operation assumptions
+- native acceleration is optional and backed by Python fallbacks
+- the research platform does not depend on external graph infrastructure
+
+This does not make Chimera a hardened public SaaS platform. It means the project is serious about the trust assumptions within its intended offline research environment.
+
+## 10. Current Limitations
+
+Chimera remains intentionally constrained in several ways:
+
+- it is still focused on authentication and identity behavior rather than broad endpoint and network telemetry
+- broad vendor-specific log normalization is incomplete
+- sparse-user and cold-start behavior still need better calibration
+- some attack families remain stronger in concept than in benchmark lift across every synthetic distribution
+- topology remains exploratory rather than central
+
+These are active research boundaries, not hidden weaknesses.
+
+## 11. Research Positioning
+
+The most accurate way to describe Chimera today is:
+
+- offline-first
+- identity-focused
+- adversarially robust
+- research-grade
+- reproducible
+
+The least accurate way to describe Chimera today is:
+
+- a universal cyber defense product
+- a finished internet-facing platform
+- a broad telemetry replacement for cloud SIEM ecosystems
+
+## 12. Near-Term Research Agenda
+
+The strongest next steps are:
+
+- more rigorous real-dataset validation
+- stronger ablations between baseline and identity-aware layers
+- better campaign benchmark difficulty calibration
+- richer sparse-identity handling
+- publication-quality examples and evaluation tables
+
+## 13. Conclusion
+
+Chimera’s differentiator is not that it performs anomaly detection offline. Many systems can do that in a limited sense.
+
+Its differentiator is that it treats offline, constrained, identity-centric anomaly research as a first-class engineering and scientific problem, then builds:
+
+- robust scoring foundations
+- deterministic identity reasoning
+- local coordination analysis
+- reproducible evaluation
+
+around that premise.
+
+That is the real shape of Chimera in v0.5.1.

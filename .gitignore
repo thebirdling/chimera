@@ -41,6 +41,9 @@ env/
 .coverage
 htmlcov/
 .tox/
+.mypy_cache/
+.ruff_cache/
+coverage.xml
 
 # Model files
 *.joblib
@@ -52,6 +55,10 @@ output/
 reports/
 test_output/
 results/
+chimera_output/
+chimera_bench/
+chimera_bench_*/
+chimera_bench_lanl/
 
 # Experiment artifacts (never commit trained models or generated data)
 e2e_*/
@@ -59,6 +66,12 @@ val_*/
 validation.csv
 data/
 *.ndjson
+tmp_*/
+*.log
+*.tmp
+
+# Native / Rust build output
+rust/graph_kernels/target/
 
 # Chimera backups
 .chimera_backups/

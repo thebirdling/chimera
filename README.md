@@ -1,31 +1,101 @@
 # Chimera: Identity-Centric Behavioral Research Framework
 
-Chimera is an offline-first framework for studying authentication and identity behavior under adversarial and infrastructure constraints. It combines unsupervised detectors, deterministic threat rules, a robustness-first ensemble engine, and a structured identity research layer for sequence and relationship reasoning.
+![Open Graph, Homepage (1)](https://cdn.thebirdling.com/github/images/chimera-v5-git-cover.png)
 
-Chimera is a research artifact, not a production SIEM. The project is designed for controlled analysis, reproducible experimentation, and publishable security research in local or air-gapped environments.
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Status: Research Prototype](https://img.shields.io/badge/Status-Research%20Prototype-orange.svg)](CONTRIBUTING.md)
+[![Release: v0.5.1](https://img.shields.io/badge/release-v0.5.1-black.svg)](CHANGELOG.md)
+[![Focus: Offline First](https://img.shields.io/badge/focus-offline--first-1b7f5a.svg)](docs/Research_System_Map.md)
+[![Focus: Identity Research](https://img.shields.io/badge/focus-identity--behavior-7b2cbf.svg)](docs/Chimera_Research_Brief.md)
+
+Chimera is an offline-first, identity-focused, adversarially robust research framework for studying authentication and account behavior under infrastructure constraints. It combines unsupervised detectors, deterministic threat rules, a robustness-first scoring engine, and a structured identity reasoning layer for sessions, sequences, campaigns, and coordinated attack patterns.
+
+Chimera is built as a research-grade system first. The goal is not to masquerade as a full cloud SIEM, but to provide a reproducible, explainable platform for identity-behavior anomaly research in local, forensic, constrained, and air-gapped environments.
+
+## Why Chimera Exists
+
+Most modern detection stacks assume:
+
+- cloud enrichment is available
+- telemetry volume is effectively unlimited
+- internet-connected control planes are acceptable
+- operational convenience matters more than reproducibility
+
+Chimera starts from the opposite premise:
+
+- core workflows should run offline
+- identity and authentication behavior deserve first-class modeling
+- adversarial robustness is part of the system, not a later bolt-on
+- research claims should be testable, benchmarkable, and explainable
+
+That makes Chimera a strong fit for:
+
+- identity-centric cybersecurity research
+- air-gapped or tightly controlled environments
+- reproducible benchmark work
+- local threat modeling and detector ablations
+- adversarial evaluation of account takeover and abuse patterns
+
+## Architecture Overview
+
+Chimera currently consists of the following major layers:
+
+| Layer | Purpose |
+| --- | --- |
+| `data_loader.py` | Canonical authentication-event ingestion from local CSV, JSON, and LANL-style auth logs |
+| `feature_engineering.py` | Temporal, geography, device, session, entropy, peer-group, and identity-research features |
+| `detectors/` | Unsupervised detectors including Isolation Forest, LOF, and registry-driven extensions |
+| `engine/` | Robust score normalization, voting, dynamic thresholding, temporal drift handling, integrity, and persistence |
+| `identity.py` | Deterministic sequence, session, graph, campaign, and takeover progression reasoning |
+| `rules/` | Human-readable deterministic detection rules for analyst-comparable logic |
+| `evaluation/` | Synthetic attack injection, benchmark runner, robustness metrics, and report generation |
+| `reporting.py` | JSON and Markdown benchmark/report artifacts for analysis and publication workflows |
+| `_native/` + `rust/graph_kernels/` | Optional native acceleration for relationship and ordered-attack kernels |
+
+See the detailed docs for a full subsystem map:
+
+- [Research System Map](docs/Research_System_Map.md)
+- [Architecture Overview](docs/Architecture_Overview.md)
+- [Evaluation Playbook](docs/Evaluation_Playbook.md)
+- [CLI and Output Guide](docs/CLI_and_Outputs.md)
 
 ## Research Direction
 
-- Offline-first: all core workflows run locally without live enrichment dependencies.
-- Identity-focused: current work centers on authentication, sessions, and coordinated account abuse.
-- Adversarially robust: persistence, integrity, and evaluation are treated as core research concerns.
-- Reproducible: deterministic seeds, synthetic attack injection, and benchmark reporting are first-class.
+Chimera v0.5.1 continues the project shift from robust anomaly scoring toward structured identity-behavior reasoning.
 
-## System Overview
+Current emphasis:
 
-Chimera currently includes:
+- offline-first execution
+- identity-focused behavioral modeling
+- adversarially robust local operation
+- deterministic synthetic attack evaluation
+- explainable event-level reasoning
+- publishable benchmark artifacts
 
-- Local ingestion into a canonical `AuthEvent` schema.
-- Behavioral feature engineering for temporal, velocity, geography, device, session, entropy, and peer-group signals.
-- Detector layer with Isolation Forest, LOF, and ensemble support.
-- Robustness engine for score normalization, voting, dynamic thresholding, threshold drift, and temporal baselines.
-- Identity research layer for session cadence, inter-event rhythm, geography transitions, shared IP/device reasoning, synchronized peers, campaign heuristics, and ordered takeover progression.
-- Evaluation harness for deterministic identity-attack injection and robustness benchmarking.
-- Paper-style benchmark reporting for publishable offline experiments.
-- Optional topology sandbox and native acceleration path.
-- Verified model loading via integrity manifests, with the CLI refusing unsigned model artifacts by default.
+## Current Identity Research Layer
 
-See [Research System Map](docs/Research_System_Map.md) for the current subsystem map, thesis evolution, and open research gaps.
+The current release includes additive research signals that join the existing engine pipeline without replacing baseline detectors:
+
+- per-user session and sequence modeling
+- short-range temporal rhythm and burst analysis
+- suspicious geography transition detection
+- shared IP, shared device, and ASN concentration features
+- synchronized peer activity and local coordination signals
+- password-spraying and low-and-slow campaign heuristics
+- ordered takeover progression from login to token reuse to privileged follow-on actions
+- analyst-readable identity reasons attached to benchmark and runtime outputs
+
+These are implemented as deterministic, feature-driven components so they remain testable, reproducible, and practical under constrained infrastructure.
+
+## CLI Experience
+
+Chimera now presents a stronger command-line identity during runtime:
+
+- branded ASCII startup banners
+- lightweight loading animations for key run paths
+- clearer command headers for `run`, `bench`, `bench-lanl`, `train`, `detect`, and other operational flows
+- Markdown benchmark reports alongside JSON artifacts for easier review and release preparation
 
 ## Quick Start
 
@@ -34,29 +104,97 @@ pip install -e .
 chimera init -o chimera.yaml
 chimera run --config chimera.yaml --input auth.csv --output ./chimera_output
 chimera bench --config chimera.yaml --input auth.csv --injection-type session_hijack
+chimera bench-lanl --config chimera.yaml --input auth.txt --limit 50000
 ```
 
-## Current Identity Research Layer
+## Example Workflows
 
-The current phase adds deterministic, additive research signals:
+Train a local detector:
 
-- per-user session/sequence modeling
-- burst and temporal-regularity analysis
-- suspicious country-transition flags
-- shared IP, shared device, and ASN concentration
-- synchronized multi-user local activity
-- password-spraying and low-and-slow campaign heuristics
-- ordered takeover sequence progression from login to token reuse to privileged follow-on activity
-- research-grade benchmark markdown reports for single runs and LANL suite summaries
+```bash
+chimera train auth.csv --output ./models/chimera_model.joblib
+```
 
-These signals are designed to plug into the existing engine pipeline as additional channels rather than replace the current detectors.
+Run the full engine pipeline:
+
+```bash
+chimera run --config chimera.yaml --input auth.csv --output ./chimera_output
+```
+
+Benchmark identity attacks:
+
+```bash
+chimera bench --config chimera.yaml --input auth.csv --injection-type password_spraying
+chimera bench --config chimera.yaml --input auth.csv --injection-type session_hijack
+```
+
+Generate a LANL-style research suite:
+
+```bash
+python scripts/run_lanl_benchmark.py --config chimera.yaml --input auth.txt --preset publishable_identity
+```
+
+## Evaluation Story
+
+Chimera is structured to benchmark identity-centric attack hypotheses, not just produce pointwise anomaly scores.
+
+Current evaluation support includes:
+
+- session hijack patterns
+- MFA bypass style identity drift
+- password spraying and credential stuffing
+- low-and-slow credential abuse
+- synchronized multi-account campaigns
+- temporal jitter intended to evade naive windows
+
+Generated reports emphasize:
+
+- detection lift
+- false-positive behavior
+- threshold stability
+- robustness under contamination shift
+- explainability examples for representative findings
+
+## Security Model
+
+Chimera is designed as a controlled offline research platform.
+
+Key release hardening points:
+
+- integrity-verified model loading is required by default
+- benchmark outputs are local and reproducible
+- optional native acceleration preserves Python fallbacks
+- no external graph or enrichment service is required for core identity reasoning
+
+Important boundary:
+
+- Chimera is suitable for controlled research and local deployment
+- Chimera is not positioned as a public multi-tenant internet-facing detection service
+
+## Supported By
+
+<a href="https://thebirdling.com">
+  <img src="https://assets.basehub.com/38638add/2ae033578930cf8dad65a3e4d01d20b1/basehub-tb-logo-rect-light.svg" alt="The Birdling" width="200" />
+</a>
+
+Chimera is maintained and deployed by **The Birdling**'s SPE (Special Projects Engineering) team.
+
+## Documentation
+
+- [Research System Map](docs/Research_System_Map.md)
+- [Chimera Research Brief](docs/Chimera_Research_Brief.md)
+- [Architecture Overview](docs/Architecture_Overview.md)
+- [Evaluation Playbook](docs/Evaluation_Playbook.md)
+- [CLI and Output Guide](docs/CLI_and_Outputs.md)
+- [Repo Transplant Shortlist](docs/Repo_Transplant_Shortlist.md)
+- [Changelog](CHANGELOG.md)
 
 ## Notes
 
-- The project remains focused on authentication and identity behavior; broad telemetry expansion is intentionally deferred.
-- The current identity layer is feature-driven and deterministic. Deep sequence models and heavyweight graph infrastructure remain out of scope for now.
-- Native Rust kernels now accelerate shared-entity burst counting and ordered takeover sequence progression, with Python fallbacks preserved for default installs.
-- Experimental topology remains optional and comparative.
+- The project remains intentionally focused on authentication and identity behavior.
+- Deep learning and heavyweight graph infrastructure remain out of scope for the core release path.
+- Rust acceleration is optional and degrades gracefully.
+- Experimental topology remains comparative, not foundational.
 
 ## License
 
