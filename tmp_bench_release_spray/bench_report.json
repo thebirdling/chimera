@@ -1,0 +1,552 @@
+{
+  "dataset": "generic_auth",
+  "injection_type": "password_spraying",
+  "injection_magnitude": 3.0,
+  "seed": 42,
+  "n_events_original": 374,
+  "n_events_injected": 14,
+  "elapsed_seconds": 0.2180000000007567,
+  "baseline": {
+    "threshold_drift_mean": 0.0,
+    "threshold_drift_max": 0.0,
+    "threshold_drift_std": 0.0,
+    "disagreement_entropy_mean": 1.0026704106896667,
+    "disagreement_entropy_std": 0.7023489574325351,
+    "score_variance_mean": 53.3799537770935,
+    "sensitivity_curve": [
+      [
+        0.01,
+        3.8776708174933576
+      ],
+      [
+        0.02526315789473684,
+        2.970562714852214
+      ],
+      [
+        0.04052631578947368,
+        1.369058888158108
+      ],
+      [
+        0.05578947368421053,
+        0.7274533625089389
+      ],
+      [
+        0.07105263157894737,
+        0.7024176066313462
+      ],
+      [
+        0.0863157894736842,
+        0.6923310128100877
+      ],
+      [
+        0.10157894736842105,
+        0.6605380457425183
+      ],
+      [
+        0.11684210526315789,
+        0.6498719663498264
+      ],
+      [
+        0.13210526315789473,
+        0.6405633727428002
+      ],
+      [
+        0.1473684210526316,
+        0.6349067254816017
+      ],
+      [
+        0.16263157894736843,
+        0.6314419116364527
+      ],
+      [
+        0.17789473684210527,
+        0.6247899563915653
+      ],
+      [
+        0.1931578947368421,
+        0.6181554845992567
+      ],
+      [
+        0.20842105263157895,
+        0.613898717286049
+      ],
+      [
+        0.2236842105263158,
+        0.6041652529076161
+      ],
+      [
+        0.23894736842105263,
+        0.5998722591955417
+      ],
+      [
+        0.25421052631578944,
+        0.5976330548341422
+      ],
+      [
+        0.2694736842105263,
+        0.5950185639978705
+      ],
+      [
+        0.2847368421052632,
+        0.5934127881382475
+      ],
+      [
+        0.3,
+        0.590162186873922
+      ]
+    ],
+    "detection_rate_at_fpr": {
+      "0.01": 1.0,
+      "0.05": 1.0,
+      "0.1": 1.0,
+      "0.2": 1.0
+    },
+    "false_positive_rate_observed": 0.8972222222222223,
+    "false_positive_count": 323,
+    "true_positive_count": 14,
+    "n_events": 374,
+    "n_anomalies_flagged": 337,
+    "n_injected": 14
+  },
+  "chimera": {
+    "threshold_drift_mean": 0.0,
+    "threshold_drift_max": 0.0,
+    "threshold_drift_std": 0.0,
+    "disagreement_entropy_mean": 1.982244693541347,
+    "disagreement_entropy_std": 0.008610856523129748,
+    "score_variance_mean": 0.1863619000813418,
+    "sensitivity_curve": [
+      [
+        0.01,
+        0.7253738560600231
+      ],
+      [
+        0.02526315789473684,
+        0.7232794200477953
+      ],
+      [
+        0.04052631578947368,
+        0.7166701830879266
+      ],
+      [
+        0.05578947368421053,
+        0.5978600617445017
+      ],
+      [
+        0.07105263157894737,
+        0.5597828971462333
+      ],
+      [
+        0.0863157894736842,
+        0.5569263128292602
+      ],
+      [
+        0.10157894736842105,
+        0.5566004168903146
+      ],
+      [
+        0.11684210526315789,
+        0.5439566272275093
+      ],
+      [
+        0.13210526315789473,
+        0.5347694031240586
+      ],
+      [
+        0.1473684210526316,
+        0.5333912262171461
+      ],
+      [
+        0.16263157894736843,
+        0.5315042541162162
+      ],
+      [
+        0.17789473684210527,
+        0.5308598962747932
+      ],
+      [
+        0.1931578947368421,
+        0.5296759999567913
+      ],
+      [
+        0.20842105263157895,
+        0.5284703781610093
+      ],
+      [
+        0.2236842105263158,
+        0.52790234145653
+      ],
+      [
+        0.23894736842105263,
+        0.5274663761245798
+      ],
+      [
+        0.25421052631578944,
+        0.5270147602416877
+      ],
+      [
+        0.2694736842105263,
+        0.5266603935991521
+      ],
+      [
+        0.2847368421052632,
+        0.5263171559904595
+      ],
+      [
+        0.3,
+        0.5260969874896009
+      ]
+    ],
+    "detection_rate_at_fpr": {
+      "0.01": 0.07142857142857142,
+      "0.05": 0.9285714285714286,
+      "0.1": 0.9285714285714286,
+      "0.2": 0.9285714285714286
+    },
+    "false_positive_rate_observed": 0.8,
+    "false_positive_count": 288,
+    "true_positive_count": 13,
+    "n_events": 374,
+    "n_anomalies_flagged": 301,
+    "n_injected": 14
+  },
+  "detection_lift_at_fpr": {
+    "0.01": -0.9285714285714286,
+    "0.05": -0.0714285714285714,
+    "0.1": -0.0714285714285714,
+    "0.2": -0.0714285714285714
+  },
+  "benchmark_slices": {
+    "takeover_only": {
+      "n_events": 1,
+      "baseline_detected_fraction": 1.0,
+      "chimera_detected_fraction": 1.0,
+      "baseline_mean_score": 9.818442773853613,
+      "chimera_mean_score": 1.0,
+      "chimera_hard_floor_hits": 1
+    },
+    "coordination_heavy": {
+      "n_events": 13,
+      "baseline_detected_fraction": 1.0,
+      "chimera_detected_fraction": 0.9230769230769231,
+      "baseline_mean_score": 3.1493848400337088,
+      "chimera_mean_score": 0.6970445353188067,
+      "chimera_hard_floor_hits": 0
+    },
+    "infra_reuse_heavy": {
+      "n_events": 13,
+      "baseline_detected_fraction": 1.0,
+      "chimera_detected_fraction": 0.9230769230769231,
+      "baseline_mean_score": 3.1493848400337088,
+      "chimera_mean_score": 0.6970445353188067,
+      "chimera_hard_floor_hits": 0
+    },
+    "mfa_bypass_focus": {
+      "n_events": 0
+    },
+    "session_concurrency_focus": {
+      "n_events": 1,
+      "baseline_detected_fraction": 1.0,
+      "chimera_detected_fraction": 1.0,
+      "baseline_mean_score": 9.818442773853613,
+      "chimera_mean_score": 1.0,
+      "chimera_hard_floor_hits": 1
+    },
+    "geo_velocity_focus": {
+      "n_events": 14,
+      "baseline_detected_fraction": 1.0,
+      "chimera_detected_fraction": 0.9285714285714286,
+      "baseline_mean_score": 3.625746121020845,
+      "chimera_mean_score": 0.7186842113674634,
+      "chimera_hard_floor_hits": 1
+    },
+    "spray_focus": {
+      "n_events": 12,
+      "baseline_detected_fraction": 1.0,
+      "chimera_detected_fraction": 1.0,
+      "baseline_mean_score": 3.2685038100139994,
+      "chimera_mean_score": 0.7169513060844129,
+      "chimera_hard_floor_hits": 0
+    },
+    "low_and_slow_focus": {
+      "n_events": 11,
+      "baseline_detected_fraction": 1.0,
+      "chimera_detected_fraction": 1.0,
+      "baseline_mean_score": 3.343076164324239,
+      "chimera_mean_score": 0.720479035576894,
+      "chimera_hard_floor_hits": 0
+    },
+    "campaign_focus": {
+      "n_events": 13,
+      "baseline_detected_fraction": 1.0,
+      "chimera_detected_fraction": 0.9230769230769231,
+      "baseline_mean_score": 3.1493848400337088,
+      "chimera_mean_score": 0.6970445353188067,
+      "chimera_hard_floor_hits": 0
+    }
+  },
+  "identity_examples": [
+    {
+      "event_index": 1,
+      "user_id": "user_01",
+      "timestamp": "2026-01-07T02:00:00",
+      "event_type": "failed_login",
+      "session_id": "s-user_01-280",
+      "ip_address": "185.220.190.71",
+      "country_code": "RU",
+      "user_agent": "ua-0",
+      "identity_fusion_score": 0.5,
+      "identity_takeover_score": 0.875,
+      "identity_session_concurrency": 0.5,
+      "identity_session_replay_burst": 0.0,
+      "identity_session_fingerprint_drift": 1.0,
+      "identity_geo_velocity_score": 1.0,
+      "identity_password_spray_score": 0.0,
+      "identity_low_and_slow_score": 0.0,
+      "identity_campaign_score": 0.0,
+      "identity_takeover_sequence_score": 0.0,
+      "identity_reasons": [
+        "Rapid sequence cadence for user_01 within the burst window.",
+        "Country transition occurred inside the suspicious relation window.",
+        "The implied travel speed between session locations is operationally implausible.",
+        "The session touched a country that is elevated in the local risk model.",
+        "Network identity shifted outside user_01's prior baseline.",
+        "Device fingerprint is new for user_01.",
+        "An existing session shifted across multiple identity-context dimensions.",
+        "The same session was active under divergent network or browser context.",
+        "Session fingerprint drift suggests token reuse under a changed client context."
+      ]
+    },
+    {
+      "event_index": 11,
+      "user_id": "user_11",
+      "timestamp": "2026-01-07T02:07:30",
+      "event_type": "failed_login",
+      "session_id": "s-user_01-280",
+      "ip_address": "185.220.190.71",
+      "country_code": "RU",
+      "user_agent": "ua-0",
+      "identity_fusion_score": 0.6,
+      "identity_takeover_score": 0.3,
+      "identity_session_concurrency": 0.0,
+      "identity_session_replay_burst": 0.0,
+      "identity_session_fingerprint_drift": 0.0,
+      "identity_geo_velocity_score": 0.0,
+      "identity_password_spray_score": 1.0,
+      "identity_low_and_slow_score": 1.0,
+      "identity_campaign_score": 1.0,
+      "identity_takeover_sequence_score": 0.0,
+      "identity_reasons": [
+        "The session touched a country that is elevated in the local risk model.",
+        "Network identity shifted outside user_11's prior baseline.",
+        "Device fingerprint is new for user_11.",
+        "Failure pattern resembles password spraying across multiple peer identities from one source.",
+        "Distributed failures accumulated slowly enough to evade simple burst windows.",
+        "Local relationship evidence suggests a coordinated identity-abuse campaign.",
+        "IP address is shared across 10 users.",
+        "Device fingerprint is reused across 10 users.",
+        "The same infrastructure pair has already appeared under another identity.",
+        "Multiple peer identities recently converged on the same infrastructure pair.",
+        "Observed 10 synchronized peer identities in the same local window."
+      ]
+    },
+    {
+      "event_index": 12,
+      "user_id": "user_12",
+      "timestamp": "2026-01-07T02:08:15",
+      "event_type": "failed_login",
+      "session_id": "s-user_01-280",
+      "ip_address": "185.220.190.71",
+      "country_code": "RU",
+      "user_agent": "ua-0",
+      "identity_fusion_score": 0.6,
+      "identity_takeover_score": 0.3,
+      "identity_session_concurrency": 0.0,
+      "identity_session_replay_burst": 0.0,
+      "identity_session_fingerprint_drift": 0.0,
+      "identity_geo_velocity_score": 0.0,
+      "identity_password_spray_score": 1.0,
+      "identity_low_and_slow_score": 1.0,
+      "identity_campaign_score": 1.0,
+      "identity_takeover_sequence_score": 0.0,
+      "identity_reasons": [
+        "The session touched a country that is elevated in the local risk model.",
+        "Network identity shifted outside user_12's prior baseline.",
+        "Device fingerprint is new for user_12.",
+        "Failure pattern resembles password spraying across multiple peer identities from one source.",
+        "Distributed failures accumulated slowly enough to evade simple burst windows.",
+        "Local relationship evidence suggests a coordinated identity-abuse campaign.",
+        "IP address is shared across 11 users.",
+        "Device fingerprint is reused across 11 users.",
+        "The same infrastructure pair has already appeared under another identity.",
+        "Multiple peer identities recently converged on the same infrastructure pair.",
+        "Observed 11 synchronized peer identities in the same local window."
+      ]
+    },
+    {
+      "event_index": 13,
+      "user_id": "user_13",
+      "timestamp": "2026-01-07T02:09:00",
+      "event_type": "failed_login",
+      "session_id": "s-user_01-280",
+      "ip_address": "185.220.190.71",
+      "country_code": "RU",
+      "user_agent": "ua-0",
+      "identity_fusion_score": 0.6,
+      "identity_takeover_score": 0.3,
+      "identity_session_concurrency": 0.0,
+      "identity_session_replay_burst": 0.0,
+      "identity_session_fingerprint_drift": 0.0,
+      "identity_geo_velocity_score": 0.0,
+      "identity_password_spray_score": 1.0,
+      "identity_low_and_slow_score": 1.0,
+      "identity_campaign_score": 1.0,
+      "identity_takeover_sequence_score": 0.0,
+      "identity_reasons": [
+        "The session touched a country that is elevated in the local risk model.",
+        "Network identity shifted outside user_13's prior baseline.",
+        "Device fingerprint is new for user_13.",
+        "Failure pattern resembles password spraying across multiple peer identities from one source.",
+        "Distributed failures accumulated slowly enough to evade simple burst windows.",
+        "Local relationship evidence suggests a coordinated identity-abuse campaign.",
+        "IP address is shared across 12 users.",
+        "Device fingerprint is reused across 12 users.",
+        "The same infrastructure pair has already appeared under another identity.",
+        "Multiple peer identities recently converged on the same infrastructure pair.",
+        "Observed 12 synchronized peer identities in the same local window."
+      ]
+    },
+    {
+      "event_index": 14,
+      "user_id": "user_14",
+      "timestamp": "2026-01-07T02:09:45",
+      "event_type": "failed_login",
+      "session_id": "s-user_01-280",
+      "ip_address": "185.220.190.71",
+      "country_code": "RU",
+      "user_agent": "ua-0",
+      "identity_fusion_score": 0.6,
+      "identity_takeover_score": 0.3,
+      "identity_session_concurrency": 0.0,
+      "identity_session_replay_burst": 0.0,
+      "identity_session_fingerprint_drift": 0.0,
+      "identity_geo_velocity_score": 0.0,
+      "identity_password_spray_score": 1.0,
+      "identity_low_and_slow_score": 1.0,
+      "identity_campaign_score": 1.0,
+      "identity_takeover_sequence_score": 0.0,
+      "identity_reasons": [
+        "The session touched a country that is elevated in the local risk model.",
+        "Network identity shifted outside user_14's prior baseline.",
+        "Device fingerprint is new for user_14.",
+        "Failure pattern resembles password spraying across multiple peer identities from one source.",
+        "Distributed failures accumulated slowly enough to evade simple burst windows.",
+        "Local relationship evidence suggests a coordinated identity-abuse campaign.",
+        "IP address is shared across 13 users.",
+        "Device fingerprint is reused across 13 users.",
+        "The same infrastructure pair has already appeared under another identity.",
+        "Multiple peer identities recently converged on the same infrastructure pair.",
+        "Observed 13 synchronized peer identities in the same local window."
+      ]
+    },
+    {
+      "event_index": 10,
+      "user_id": "user_10",
+      "timestamp": "2026-01-07T02:06:45",
+      "event_type": "failed_login",
+      "session_id": "s-user_01-280",
+      "ip_address": "185.220.190.71",
+      "country_code": "RU",
+      "user_agent": "ua-0",
+      "identity_fusion_score": 0.6,
+      "identity_takeover_score": 0.298,
+      "identity_session_concurrency": 0.0,
+      "identity_session_replay_burst": 0.0,
+      "identity_session_fingerprint_drift": 0.0,
+      "identity_geo_velocity_score": 0.0,
+      "identity_password_spray_score": 1.0,
+      "identity_low_and_slow_score": 1.0,
+      "identity_campaign_score": 0.98,
+      "identity_takeover_sequence_score": 0.0,
+      "identity_reasons": [
+        "The session touched a country that is elevated in the local risk model.",
+        "Network identity shifted outside user_10's prior baseline.",
+        "Device fingerprint is new for user_10.",
+        "Failure pattern resembles password spraying across multiple peer identities from one source.",
+        "Distributed failures accumulated slowly enough to evade simple burst windows.",
+        "Local relationship evidence suggests a coordinated identity-abuse campaign.",
+        "IP address is shared across 9 users.",
+        "Device fingerprint is reused across 9 users.",
+        "The same infrastructure pair has already appeared under another identity.",
+        "Multiple peer identities recently converged on the same infrastructure pair.",
+        "Observed 9 synchronized peer identities in the same local window."
+      ]
+    },
+    {
+      "event_index": 9,
+      "user_id": "user_09",
+      "timestamp": "2026-01-07T02:06:00",
+      "event_type": "failed_login",
+      "session_id": "s-user_01-280",
+      "ip_address": "185.220.190.71",
+      "country_code": "RU",
+      "user_agent": "ua-0",
+      "identity_fusion_score": 0.5925,
+      "identity_takeover_score": 0.296,
+      "identity_session_concurrency": 0.0,
+      "identity_session_replay_burst": 0.0,
+      "identity_session_fingerprint_drift": 0.0,
+      "identity_geo_velocity_score": 0.0,
+      "identity_password_spray_score": 1.0,
+      "identity_low_and_slow_score": 1.0,
+      "identity_campaign_score": 0.96,
+      "identity_takeover_sequence_score": 0.0,
+      "identity_reasons": [
+        "The session touched a country that is elevated in the local risk model.",
+        "Network identity shifted outside user_09's prior baseline.",
+        "Device fingerprint is new for user_09.",
+        "Failure pattern resembles password spraying across multiple peer identities from one source.",
+        "Distributed failures accumulated slowly enough to evade simple burst windows.",
+        "Local relationship evidence suggests a coordinated identity-abuse campaign.",
+        "IP address is shared across 8 users.",
+        "Device fingerprint is reused across 8 users.",
+        "The same infrastructure pair has already appeared under another identity.",
+        "Multiple peer identities recently converged on the same infrastructure pair.",
+        "Observed 8 synchronized peer identities in the same local window."
+      ]
+    },
+    {
+      "event_index": 8,
+      "user_id": "user_08",
+      "timestamp": "2026-01-07T02:05:15",
+      "event_type": "failed_login",
+      "session_id": "s-user_01-280",
+      "ip_address": "185.220.190.71",
+      "country_code": "RU",
+      "user_agent": "ua-0",
+      "identity_fusion_score": 0.54,
+      "identity_takeover_score": 0.294,
+      "identity_session_concurrency": 0.0,
+      "identity_session_replay_burst": 0.0,
+      "identity_session_fingerprint_drift": 0.0,
+      "identity_geo_velocity_score": 0.0,
+      "identity_password_spray_score": 1.0,
+      "identity_low_and_slow_score": 1.0,
+      "identity_campaign_score": 0.94,
+      "identity_takeover_sequence_score": 0.0,
+      "identity_reasons": [
+        "The session touched a country that is elevated in the local risk model.",
+        "Network identity shifted outside user_08's prior baseline.",
+        "Device fingerprint is new for user_08.",
+        "Failure pattern resembles password spraying across multiple peer identities from one source.",
+        "Distributed failures accumulated slowly enough to evade simple burst windows.",
+        "Local relationship evidence suggests a coordinated identity-abuse campaign.",
+        "IP address is shared across 7 users.",
+        "Device fingerprint is reused across 7 users.",
+        "The same infrastructure pair has already appeared under another identity.",
+        "Multiple peer identities recently converged on the same infrastructure pair.",
+        "Observed 7 synchronized peer identities in the same local window."
+      ]
+    }
+  ]
+}

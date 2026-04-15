@@ -27,6 +27,7 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 
 from chimera.data_loader import AuthEvent
+from chimera.identity import IdentityResearchAnalyzer
 from chimera.threat_intel import ThreatIntel
 
 logger = logging.getLogger(__name__)
@@ -68,6 +69,28 @@ class UserBehaviorProfile:
 
     # Velocity tracking
     event_times: list[datetime] = field(default_factory=list)
+
+    def clone(self) -> "UserBehaviorProfile":
+        """Create a detached copy for causal feature extraction."""
+        return UserBehaviorProfile(
+            user_id=self.user_id,
+            typical_hours=list(self.typical_hours),
+            typical_days=list(self.typical_days),
+            first_seen=self.first_seen,
+            last_seen=self.last_seen,
+            known_ips=set(self.known_ips),
+            known_asns=set(self.known_asns),
+            known_countries=set(self.known_countries),
+            known_user_agents=set(self.known_user_agents),
+            known_devices=set(self.known_devices),
+            typical_session_duration=self.typical_session_duration,
+            session_durations=list(self.session_durations),
+            typical_auth_methods=set(self.typical_auth_methods),
+            failure_rate=self.failure_rate,
+            total_events=self.total_events,
+            failure_count=self.failure_count,
+            event_times=list(self.event_times),
+        )
 
     def update(self, event: AuthEvent) -> None:
         """Update profile with a new event."""
@@ -199,18 +222,26 @@ class FeatureEngineer:
         "impossible_travel_flag",
     ]
 
+    IDENTITY_RESEARCH_FEATURES = IdentityResearchAnalyzer.FEATURE_COLUMNS
+
     def __init__(
         self,
         max_history_days: int = 30,
         enable_entropy: bool = True,
         enable_peer_group: bool = True,
         enable_impossible_travel: bool = True,
+        enable_identity_research: bool = False,
+        identity_session_gap_minutes: int = 45,
+        identity_burst_window_minutes: int = 5,
+        identity_relation_window_minutes: int = 15,
+        identity_max_shared_entity_users: int = 10,
         threat_feed_path: Optional[str] = None,
     ):
         self.max_history_days = max_history_days
         self.enable_entropy = enable_entropy
         self.enable_peer_group = enable_peer_group
         self.enable_impossible_travel = enable_impossible_travel
+        self.enable_identity_research = enable_identity_research
         self.threat_intel = ThreatIntel(feed_path=threat_feed_path)
         self.user_profiles: dict[str, UserBehaviorProfile] = {}
         self.scaler = StandardScaler()
@@ -224,11 +255,20 @@ class FeatureEngineer:
         self._global_velocity_std: float = 3.0
 
         self._feature_names: Optional[list[str]] = None
+        self._identity_research: Optional[IdentityResearchAnalyzer] = None
+        if self.enable_identity_research:
+            self._identity_research = IdentityResearchAnalyzer(
+                session_gap_minutes=identity_session_gap_minutes,
+                burst_window_minutes=identity_burst_window_minutes,
+                relation_window_minutes=identity_relation_window_minutes,
+                max_shared_entity_users=identity_max_shared_entity_users,
+            )
 
     def fit(self, events: list[AuthEvent]) -> "FeatureEngineer":
         """Build user profiles from historical events."""
         logger.info(f"Building profiles from {len(events)} events")
 
+        self.user_profiles = {}
         sorted_events = sorted(events, key=lambda e: e.timestamp)
 
         for event in sorted_events:
@@ -252,18 +292,15 @@ class FeatureEngineer:
             self._global_velocity_mean = float(np.mean(counts))
             self._global_velocity_std = max(float(np.std(counts)), 1.0)
 
+        if self._identity_research is not None:
+            self._identity_research.fit(sorted_events)
+
         logger.info(f"Built profiles for {len(self.user_profiles)} users")
         return self
 
     def transform(self, events: list[AuthEvent]) -> pd.DataFrame:
-        """Transform events into feature vectors."""
-        features_list = []
-
-        for event in events:
-            features = self._extract_features(event)
-            features_list.append(features)
-
-        df = pd.DataFrame(features_list)
+        """Transform events into feature vectors using causal history only."""
+        df = self._build_causal_feature_frame(events)
 
         numeric_cols = df.select_dtypes(include=[np.number]).columns
         df[numeric_cols] = df[numeric_cols].fillna(0)
@@ -271,12 +308,63 @@ class FeatureEngineer:
         return df
 
     def fit_transform(self, events: list[AuthEvent]) -> pd.DataFrame:
-        """Fit profiles and transform events in one step."""
-        return self.fit(events).transform(events)
+        """Fit profiles and transform events in one causal pass."""
+        self.user_profiles = {}
+        df = self._build_causal_feature_frame(events, persist_profiles=True)
+        numeric_cols = df.select_dtypes(include=[np.number]).columns
+        df[numeric_cols] = df[numeric_cols].fillna(0)
+        self.is_fitted = True
+        return df
 
-    def _extract_features(self, event: AuthEvent) -> dict[str, Any]:
+    def _build_causal_feature_frame(
+        self,
+        events: list[AuthEvent],
+        *,
+        persist_profiles: bool = False,
+    ) -> pd.DataFrame:
+        indexed_events = list(enumerate(events))
+        indexed_events.sort(key=lambda item: (item[1].timestamp, item[0]))
+        working_profiles = {
+            user_id: profile.clone() for user_id, profile in self.user_profiles.items()
+        }
+        features_list: list[Optional[dict[str, Any]]] = [None] * len(events)
+
+        identity_signals = None
+        if self._identity_research is not None:
+            if persist_profiles:
+                identity_signals = self._identity_research.fit_transform(events)
+            else:
+                identity_signals = self._identity_research.transform(events)
+
+        for original_index, event in indexed_events:
+            profile = working_profiles.get(event.user_id)
+            features = self._extract_features(event, profile)
+            if identity_signals is not None:
+                signal = identity_signals[original_index]
+                features.update(signal.features)
+                features["identity_reasons"] = signal.reasons
+            features_list[original_index] = features
+
+            if profile is None:
+                profile = UserBehaviorProfile(user_id=event.user_id)
+                working_profiles[event.user_id] = profile
+            profile.update(event)
+
+        if persist_profiles:
+            self.user_profiles = working_profiles
+            if self._identity_research is not None:
+                self._identity_research.fit(events)
+
+        return pd.DataFrame([features for features in features_list if features is not None])
+
+    def _extract_features(
+        self,
+        event: AuthEvent,
+        profile: Optional[UserBehaviorProfile] = None,
+    ) -> dict[str, Any]:
         """Extract all features for a single event."""
-        profile = self.user_profiles.get(event.user_id)
+        if profile is None:
+            profile = self.user_profiles.get(event.user_id)
 
         features: dict[str, Any] = {
             "user_id": event.user_id,
@@ -610,6 +698,8 @@ class FeatureEngineer:
                 all_features += self.PEER_GROUP_FEATURES
             if self.enable_impossible_travel:
                 all_features += self.TRAVEL_FEATURES
+            if self.enable_identity_research:
+                all_features += self.IDENTITY_RESEARCH_FEATURES
             self._feature_names = all_features
         return self._feature_names
 

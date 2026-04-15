@@ -1,0 +1,83 @@
+# Chimera v0.4 - Identity-Centric Research Configuration
+# All parameters are documented with their defaults.
+
+version: "0.4"
+seed: 42
+
+features:
+  max_history_days: 30
+  enable_peer_group: true
+  enable_entropy: true
+  enable_impossible_travel: true
+
+model:
+  detector: isolation_forest
+  n_estimators: 150
+  contamination: auto
+  scaler: standard
+  ensemble_detectors: [isolation_forest, lof]
+
+normalization:
+  strategy: minmax
+  low_variance_threshold: 1.0e-4
+  collapse_epsilon: 1.0e-6
+  quantile_range: [0.05, 0.95]
+
+ensemble_v3:
+  voting_strategy: mean
+  trim_fraction: 0.1
+  weights: {}
+
+threshold:
+  contamination: 0.05
+  recalc_window: 500
+  max_drift_history: 5000
+
+rules:
+  enabled: true
+  load_builtins: true
+  custom_rules_path: null
+
+scoring:
+  auto_threshold: true
+  contamination: 0.1
+  combine_ml_and_rules: true
+  rule_weight: 0.3
+
+integrity:
+  enabled: true
+  backup_on_train: true
+
+evaluation:
+  injection_enabled: false
+  injection_type: session_hijack
+  injection_magnitude: 3.0
+  injection_window: 50
+  injection_seed: 42
+  contamination_range: [0.01, 0.30]
+  sensitivity_steps: 20
+  attack_families: [session_hijack, mfa_bypass, low_and_slow, password_spraying, coordinated_campaign, identity_drift, temporal_jitter]
+  report_slices: [baseline, chimera, identity_research, takeover_only, coordination_heavy, campaign_focus, infra_reuse_heavy, mfa_bypass_focus, spray_focus, low_and_slow_focus, session_concurrency_focus, geo_velocity_focus, examples]
+
+output:
+  formats: [json, csv, markdown]
+  output_dir: ./chimera_output
+  prefix: chimera
+  include_raw_events: false
+
+experimental:
+  topology_enabled: false
+  topology_epsilon: 0.5
+  topology_max_dimension: 1
+  topology_max_samples: 2000
+
+identity_research:
+  enabled: false
+  session_gap_minutes: 45
+  burst_window_minutes: 5
+  relation_window_minutes: 15
+  max_shared_entity_users: 10
+  scoring_hard_floor_enabled: true
+  fusion_hard_floor: 0.35
+  takeover_hard_floor: 0.58
+  takeover_support_floor: 0.55

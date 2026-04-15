@@ -18,6 +18,10 @@ import logging
 import numpy as np
 import pandas as pd
 import joblib
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from chimera.engine.integrity import IntegrityManifest
 
 logger = logging.getLogger(__name__)
 
@@ -209,8 +213,20 @@ class BaseDetector(ABC):
 
     # ── Persistence ──────────────────────────────────────────────
 
-    def save(self, path: Union[str, Path]) -> None:
-        """Save the trained detector to disk."""
+    def save(
+        self,
+        path: Union[str, Path],
+        manifest: Optional["IntegrityManifest"] = None,
+    ) -> None:
+        """Save the trained detector to disk.
+
+        Parameters
+        ----------
+        manifest:
+            Optional :class:`IntegrityManifest`. If provided, the saved
+            ``.joblib`` file is automatically registered so subsequent
+            ``load()`` calls can verify its integrity.
+        """
         self._check_fitted()
         path = Path(path)
         if path.suffix == "":
@@ -220,21 +236,59 @@ class BaseDetector(ABC):
         payload = self._get_save_payload()
         joblib.dump(payload, path)
 
-        # Side-car metadata JSON
+        # Side-car metadata JSON — written atomically with restrictive perms
+        from chimera.engine.safe_io import atomic_write_text
         meta_path = path.parent / f"{path.stem}_metadata.json"
-        with open(meta_path, "w") as f:
-            json.dump(payload.get("metadata", {}), f, indent=2)
+        atomic_write_text(
+            meta_path,
+            json.dumps(payload.get("metadata", {}), indent=2),
+            mode=0o644,  # metadata is not sensitive — readable but not world-writable
+        )
 
-        logger.info(f"Detector '{self.name}' saved to {path}")
+        # Auto-register model hash with integrity manifest
+        if manifest is not None:
+            manifest.register(path, overwrite=True)
+            logger.info(
+                "[detector] '%s' registered in integrity manifest.", self.name
+            )
+
+        logger.info("Detector '%s' saved to %s", self.name, path)
 
     @classmethod
-    def load(cls, path: Union[str, Path]) -> "BaseDetector":
-        """Load a trained detector from disk."""
+    def load(
+        cls,
+        path: Union[str, Path],
+        manifest: Optional["IntegrityManifest"] = None,
+        expected_digest: Optional[str] = None,
+        allow_unverified: bool = False,
+    ) -> "BaseDetector":
+        """Load a trained detector from disk with integrity verification.
+
+        Parameters
+        ----------
+        manifest:
+            Optional :class:`IntegrityManifest`. If provided, the file's
+            SHA-256 digest is verified BEFORE any deserialization occurs.
+            This prevents RCE from tampered ``.joblib`` files.
+        """
+        from chimera.engine.safe_io import safe_joblib_load
+        from chimera.engine.exceptions import IntegrityError
+
         path = Path(path)
         if not path.exists():
             raise FileNotFoundError(f"Detector file not found: {path}")
 
-        payload = joblib.load(path)
+        if manifest is None and expected_digest is None and not allow_unverified:
+            raise IntegrityError(
+                "Refusing to load detector without integrity verification. "
+                "Provide an IntegrityManifest or expected_digest."
+            )
+
+        payload = safe_joblib_load(
+            path,
+            manifest=manifest,
+            expected_digest=expected_digest,
+        )
 
         # Resolve the correct subclass via registry
         detector_type = payload.get("detector_type", cls.name)
@@ -244,7 +298,7 @@ class BaseDetector(ABC):
         instance = detector_cls.__new__(detector_cls)
         instance._restore_from_payload(payload)
 
-        logger.info(f"Detector '{instance.name}' loaded from {path}")
+        logger.info("Detector '%s' loaded from %s", instance.name, path)
         return instance
 
     def _get_save_payload(self) -> dict[str, Any]:

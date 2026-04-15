@@ -26,6 +26,8 @@ class TestChimeraConfig:
         assert "rules" in d
         assert "scoring" in d
         assert "output" in d
+        assert "identity_research" in d
+        assert "evaluation" in d
 
     def test_save_load_json(self, tmp_path):
         cfg = ChimeraConfig()

@@ -1,0 +1,464 @@
+{
+  "dataset": "lanl_auth",
+  "injection_type": "session_hijack",
+  "injection_magnitude": 3.0,
+  "seed": 42,
+  "n_events_original": 110,
+  "n_events_injected": 62,
+  "elapsed_seconds": 0.14099999999962165,
+  "baseline": {
+    "threshold_drift_mean": 0.0,
+    "threshold_drift_max": 0.0,
+    "threshold_drift_std": 0.0,
+    "disagreement_entropy_mean": 0.3729043515586794,
+    "disagreement_entropy_std": 0.4743613904975496,
+    "score_variance_mean": 71.06666240274726,
+    "sensitivity_curve": [
+      [
+        0.01,
+        7.986581602075873
+      ],
+      [
+        0.02526315789473684,
+        7.786308307116063
+      ],
+      [
+        0.04052631578947368,
+        7.504534844910241
+      ],
+      [
+        0.05578947368421053,
+        7.153495537860908
+      ],
+      [
+        0.07105263157894737,
+        6.655263064563687
+      ],
+      [
+        0.0863157894736842,
+        6.587861085591622
+      ],
+      [
+        0.10157894736842105,
+        6.520993948290111
+      ],
+      [
+        0.11684210526315789,
+        6.101922198871906
+      ],
+      [
+        0.13210526315789473,
+        5.911427580469541
+      ],
+      [
+        0.1473684210526316,
+        5.844954403925316
+      ],
+      [
+        0.16263157894736843,
+        5.77322748693487
+      ],
+      [
+        0.17789473684210527,
+        5.1755096780127205
+      ],
+      [
+        0.1931578947368421,
+        5.107565328433919
+      ],
+      [
+        0.20842105263157895,
+        5.041609781901416
+      ],
+      [
+        0.2236842105263158,
+        4.958268188058554
+      ],
+      [
+        0.23894736842105263,
+        3.9732474906277857
+      ],
+      [
+        0.25421052631578944,
+        3.914474396588265
+      ],
+      [
+        0.2694736842105263,
+        3.857696055554341
+      ],
+      [
+        0.2847368421052632,
+        3.7631167554050675
+      ],
+      [
+        0.3,
+        3.0572557763486308
+      ]
+    ],
+    "detection_rate_at_fpr": {
+      "0.01": 0.9838709677419355,
+      "0.05": 0.9838709677419355,
+      "0.1": 0.9838709677419355,
+      "0.2": 1.0
+    },
+    "false_positive_rate_observed": 1.0,
+    "false_positive_count": 48,
+    "true_positive_count": 62,
+    "n_events": 110,
+    "n_anomalies_flagged": 110,
+    "n_injected": 62
+  },
+  "chimera": {
+    "threshold_drift_mean": 0.0,
+    "threshold_drift_max": 0.0,
+    "threshold_drift_std": 0.0,
+    "disagreement_entropy_mean": 2.0019015635400605,
+    "disagreement_entropy_std": 0.008289266933138733,
+    "score_variance_mean": 0.16648689396177999,
+    "sensitivity_curve": [
+      [
+        0.01,
+        1.0
+      ],
+      [
+        0.02526315789473684,
+        1.0
+      ],
+      [
+        0.04052631578947368,
+        1.0
+      ],
+      [
+        0.05578947368421053,
+        1.0
+      ],
+      [
+        0.07105263157894737,
+        1.0
+      ],
+      [
+        0.0863157894736842,
+        1.0
+      ],
+      [
+        0.10157894736842105,
+        1.0
+      ],
+      [
+        0.11684210526315789,
+        1.0
+      ],
+      [
+        0.13210526315789473,
+        1.0
+      ],
+      [
+        0.1473684210526316,
+        1.0
+      ],
+      [
+        0.16263157894736843,
+        1.0
+      ],
+      [
+        0.17789473684210527,
+        1.0
+      ],
+      [
+        0.1931578947368421,
+        1.0
+      ],
+      [
+        0.20842105263157895,
+        1.0
+      ],
+      [
+        0.2236842105263158,
+        1.0
+      ],
+      [
+        0.23894736842105263,
+        1.0
+      ],
+      [
+        0.25421052631578944,
+        1.0
+      ],
+      [
+        0.2694736842105263,
+        1.0
+      ],
+      [
+        0.2847368421052632,
+        1.0
+      ],
+      [
+        0.3,
+        1.0
+      ]
+    ],
+    "detection_rate_at_fpr": {
+      "0.01": 1.0,
+      "0.05": 1.0,
+      "0.1": 1.0,
+      "0.2": 1.0
+    },
+    "false_positive_rate_observed": 0.0,
+    "false_positive_count": 0,
+    "true_positive_count": 62,
+    "n_events": 110,
+    "n_anomalies_flagged": 62,
+    "n_injected": 62
+  },
+  "detection_lift_at_fpr": {
+    "0.01": 0.016129032258064502,
+    "0.05": 0.016129032258064502,
+    "0.1": 0.016129032258064502,
+    "0.2": 0.0
+  },
+  "benchmark_slices": {
+    "takeover_only": {
+      "n_events": 61,
+      "baseline_detected_fraction": 1.0,
+      "chimera_detected_fraction": 1.0,
+      "baseline_mean_score": 4.038830657568296,
+      "chimera_mean_score": 1.0,
+      "chimera_hard_floor_hits": 61
+    },
+    "coordination_heavy": {
+      "n_events": 61,
+      "baseline_detected_fraction": 1.0,
+      "chimera_detected_fraction": 1.0,
+      "baseline_mean_score": 4.03142130583617,
+      "chimera_mean_score": 0.9958681274821573,
+      "chimera_hard_floor_hits": 60
+    },
+    "infra_reuse_heavy": {
+      "n_events": 0
+    },
+    "mfa_bypass_focus": {
+      "n_events": 0
+    },
+    "session_concurrency_focus": {
+      "n_events": 61,
+      "baseline_detected_fraction": 1.0,
+      "chimera_detected_fraction": 1.0,
+      "baseline_mean_score": 4.038830657568296,
+      "chimera_mean_score": 1.0,
+      "chimera_hard_floor_hits": 61
+    },
+    "geo_velocity_focus": {
+      "n_events": 7,
+      "baseline_detected_fraction": 1.0,
+      "chimera_detected_fraction": 1.0,
+      "baseline_mean_score": 1.0770916491154074,
+      "chimera_mean_score": 1.0,
+      "chimera_hard_floor_hits": 7
+    }
+  },
+  "identity_examples": [
+    {
+      "event_index": 38,
+      "user_id": "U2",
+      "timestamp": "2010-01-01T02:26:05",
+      "event_type": "session_refresh",
+      "session_id": "hijack-U2",
+      "ip_address": "185.220.7.190",
+      "country_code": "SG",
+      "user_agent": "Mozilla/5.0 (X11; Linux x86_64) HeadlessChrome/122.0",
+      "identity_fusion_score": 0.505,
+      "identity_takeover_score": 1.0,
+      "identity_session_concurrency": 1.0,
+      "identity_session_replay_burst": 0.5,
+      "identity_session_fingerprint_drift": 1.0,
+      "identity_geo_velocity_score": 1.0,
+      "identity_reasons": [
+        "Rapid sequence cadence for U2 within the burst window.",
+        "Country transition occurred inside the suspicious relation window.",
+        "The implied travel speed between session locations is operationally implausible.",
+        "An existing session shifted across multiple identity-context dimensions.",
+        "The same session was active under divergent network or browser context.",
+        "The session generated a replay-like burst of requests in a very short window.",
+        "Session fingerprint drift suggests token reuse under a changed client context.",
+        "Rapid transition suggests a session continuation under a different identity context."
+      ]
+    },
+    {
+      "event_index": 40,
+      "user_id": "U2",
+      "timestamp": "2010-01-01T02:26:08",
+      "event_type": "session_refresh",
+      "session_id": "hijack-U2",
+      "ip_address": "185.220.7.190",
+      "country_code": "SG",
+      "user_agent": "Mozilla/5.0 (X11; Linux x86_64) HeadlessChrome/122.0",
+      "identity_fusion_score": 0.505,
+      "identity_takeover_score": 1.0,
+      "identity_session_concurrency": 1.0,
+      "identity_session_replay_burst": 0.5,
+      "identity_session_fingerprint_drift": 1.0,
+      "identity_geo_velocity_score": 1.0,
+      "identity_reasons": [
+        "Rapid sequence cadence for U2 within the burst window.",
+        "Country transition occurred inside the suspicious relation window.",
+        "The implied travel speed between session locations is operationally implausible.",
+        "An existing session shifted across multiple identity-context dimensions.",
+        "The same session was active under divergent network or browser context.",
+        "The session generated a replay-like burst of requests in a very short window.",
+        "Session fingerprint drift suggests token reuse under a changed client context.",
+        "Rapid transition suggests a session continuation under a different identity context."
+      ]
+    },
+    {
+      "event_index": 43,
+      "user_id": "U2",
+      "timestamp": "2010-01-01T02:26:14",
+      "event_type": "session_refresh",
+      "session_id": "hijack-U2",
+      "ip_address": "185.220.7.190",
+      "country_code": "SG",
+      "user_agent": "Mozilla/5.0 (X11; Linux x86_64) HeadlessChrome/122.0",
+      "identity_fusion_score": 0.505,
+      "identity_takeover_score": 1.0,
+      "identity_session_concurrency": 1.0,
+      "identity_session_replay_burst": 0.0,
+      "identity_session_fingerprint_drift": 1.0,
+      "identity_geo_velocity_score": 1.0,
+      "identity_reasons": [
+        "Rapid sequence cadence for U2 within the burst window.",
+        "Country transition occurred inside the suspicious relation window.",
+        "The implied travel speed between session locations is operationally implausible.",
+        "An existing session shifted across multiple identity-context dimensions.",
+        "The same session was active under divergent network or browser context.",
+        "Session fingerprint drift suggests token reuse under a changed client context.",
+        "Rapid transition suggests a session continuation under a different identity context."
+      ]
+    },
+    {
+      "event_index": 36,
+      "user_id": "U2",
+      "timestamp": "2010-01-01T02:26:02",
+      "event_type": "login",
+      "session_id": "hijack-U2",
+      "ip_address": "185.220.7.190",
+      "country_code": "SG",
+      "user_agent": "Mozilla/5.0 (X11; Linux x86_64) HeadlessChrome/122.0",
+      "identity_fusion_score": 0.5,
+      "identity_takeover_score": 1.0,
+      "identity_session_concurrency": 0.5,
+      "identity_session_replay_burst": 0.0,
+      "identity_session_fingerprint_drift": 1.0,
+      "identity_geo_velocity_score": 1.0,
+      "identity_reasons": [
+        "Rapid sequence cadence for U2 within the burst window.",
+        "Country transition occurred inside the suspicious relation window.",
+        "The implied travel speed between session locations is operationally implausible.",
+        "Network identity shifted outside U2's prior baseline.",
+        "Device fingerprint is new for U2.",
+        "An existing session shifted across multiple identity-context dimensions.",
+        "The same session was active under divergent network or browser context.",
+        "Session fingerprint drift suggests token reuse under a changed client context.",
+        "Rapid transition suggests a session continuation under a different identity context."
+      ]
+    },
+    {
+      "event_index": 42,
+      "user_id": "U2",
+      "timestamp": "2010-01-01T02:26:12",
+      "event_type": "session_refresh",
+      "session_id": "hijack-U2",
+      "ip_address": "71.63.58.36",
+      "country_code": "NG",
+      "user_agent": "Mozilla/5.0",
+      "identity_fusion_score": 0.5575,
+      "identity_takeover_score": 0.975,
+      "identity_session_concurrency": 1.0,
+      "identity_session_replay_burst": 0.5,
+      "identity_session_fingerprint_drift": 1.0,
+      "identity_geo_velocity_score": 1.0,
+      "identity_reasons": [
+        "Rapid sequence cadence for U2 within the burst window.",
+        "Country transition occurred inside the suspicious relation window.",
+        "The implied travel speed between session locations is operationally implausible.",
+        "The same session was active under divergent network or browser context.",
+        "The session generated a replay-like burst of requests in a very short window.",
+        "Session fingerprint drift suggests token reuse under a changed client context.",
+        "Rapid transition suggests a session continuation under a different identity context.",
+        "Device fingerprint is reused across 4 users."
+      ]
+    },
+    {
+      "event_index": 39,
+      "user_id": "U2",
+      "timestamp": "2010-01-01T02:26:08",
+      "event_type": "session_refresh",
+      "session_id": "hijack-U2",
+      "ip_address": "71.63.58.36",
+      "country_code": "NG",
+      "user_agent": "Mozilla/5.0",
+      "identity_fusion_score": 0.548167,
+      "identity_takeover_score": 0.9,
+      "identity_session_concurrency": 1.0,
+      "identity_session_replay_burst": 0.0,
+      "identity_session_fingerprint_drift": 1.0,
+      "identity_geo_velocity_score": 1.0,
+      "identity_reasons": [
+        "Rapid sequence cadence for U2 within the burst window.",
+        "Country transition occurred inside the suspicious relation window.",
+        "The implied travel speed between session locations is operationally implausible.",
+        "The same session was active under divergent network or browser context.",
+        "Session fingerprint drift suggests token reuse under a changed client context.",
+        "Rapid transition suggests a session continuation under a different identity context.",
+        "Device fingerprint is reused across 4 users."
+      ]
+    },
+    {
+      "event_index": 98,
+      "user_id": "U2",
+      "timestamp": "2010-01-01T02:30:00",
+      "event_type": "privileged_action",
+      "session_id": "hijack-U2",
+      "ip_address": "185.220.7.190",
+      "country_code": "SG",
+      "user_agent": "Mozilla/5.0 (X11; Linux x86_64) HeadlessChrome/122.0",
+      "identity_fusion_score": 0.435,
+      "identity_takeover_score": 0.85,
+      "identity_session_concurrency": 1.0,
+      "identity_session_replay_burst": 0.0,
+      "identity_session_fingerprint_drift": 1.0,
+      "identity_geo_velocity_score": 0.0,
+      "identity_reasons": [
+        "Rapid sequence cadence for U2 within the burst window.",
+        "Inter-event timing deviates sharply from U2's baseline rhythm.",
+        "An existing session shifted across multiple identity-context dimensions.",
+        "The same session was active under divergent network or browser context.",
+        "Session fingerprint drift suggests token reuse under a changed client context.",
+        "Privileged activity followed the suspicious session transition."
+      ]
+    },
+    {
+      "event_index": 100,
+      "user_id": "U2",
+      "timestamp": "2010-01-01T02:31:00",
+      "event_type": "privileged_action",
+      "session_id": "hijack-U2",
+      "ip_address": "185.220.7.190",
+      "country_code": "SG",
+      "user_agent": "Mozilla/5.0 (X11; Linux x86_64) HeadlessChrome/122.0",
+      "identity_fusion_score": 0.435,
+      "identity_takeover_score": 0.85,
+      "identity_session_concurrency": 1.0,
+      "identity_session_replay_burst": 0.0,
+      "identity_session_fingerprint_drift": 1.0,
+      "identity_geo_velocity_score": 0.0,
+      "identity_reasons": [
+        "Rapid sequence cadence for U2 within the burst window.",
+        "Inter-event timing deviates sharply from U2's baseline rhythm.",
+        "An existing session shifted across multiple identity-context dimensions.",
+        "The same session was active under divergent network or browser context.",
+        "Session fingerprint drift suggests token reuse under a changed client context.",
+        "Privileged activity followed the suspicious session transition."
+      ]
+    }
+  ]
+}

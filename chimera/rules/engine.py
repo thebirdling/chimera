@@ -243,18 +243,20 @@ def _eval_impossible_travel(
 def _eval_credential_stuffing(
     events: list[AuthEvent], params: dict[str, Any]
 ) -> list[RuleMatch]:
-    """Detect many users failing from the same IP in a short window."""
+    """Detect high-rate, multi-account login failures from the same IP."""
     min_users = params.get("min_users", 3)
+    min_attempts = params.get("min_attempts", 6)
     window_minutes = params.get("window_minutes", 15)
+    max_success_rate = params.get("max_success_rate", 0.2)
     window = timedelta(minutes=window_minutes)
 
     matches = []
-    failures = [
-        (idx, e) for idx, e in enumerate(events) if e.is_failure and e.ip_address
+    indexed_events = [
+        (idx, e) for idx, e in enumerate(events) if e.ip_address and e.user_id
     ]
 
     ip_failures: dict[str, list[tuple[int, AuthEvent]]] = defaultdict(list)
-    for idx, e in failures:
+    for idx, e in indexed_events:
         ip_failures[e.ip_address].append((idx, e))
 
     for ip, ip_events in ip_failures.items():
@@ -264,24 +266,34 @@ def _eval_credential_stuffing(
         while i < len(ip_events):
             window_end = ip_events[i][1].timestamp + window
             burst = [f for f in ip_events[i:] if f[1].timestamp <= window_end]
-            unique_users = set(f[1].user_id for f in burst)
+            unique_users = {f[1].user_id for f in burst if f[1].user_id}
+            failed_burst = [f for f in burst if f[1].is_failure]
+            success_count = sum(1 for _, event in burst if event.success)
+            success_rate = success_count / max(len(burst), 1)
 
-            if len(unique_users) >= min_users:
+            if (
+                len(unique_users) >= min_users
+                and len(failed_burst) >= min_attempts
+                and success_rate <= max_success_rate
+            ):
                 matches.append(
                     RuleMatch(
                         rule_id="credential_stuffing",
                         rule_name="Credential Stuffing",
                         severity="critical",
                         description=(
-                            f"{len(unique_users)} users failed login from "
-                            f"IP {ip} within {window_minutes} minutes"
+                            f"{len(failed_burst)} login attempts across {len(unique_users)} accounts "
+                            f"from IP {ip} within {window_minutes} minutes"
                         ),
                         matched_events=[b[0] for b in burst],
-                        matched_users=list(unique_users),
+                        matched_users=sorted(unique_users),
                         timestamp=burst[0][1].timestamp,
                         details={
                             "ip_address": ip,
                             "unique_users": len(unique_users),
+                            "attempt_count": len(burst),
+                            "failed_attempt_count": len(failed_burst),
+                            "success_rate": success_rate,
                         },
                     )
                 )
@@ -491,6 +503,276 @@ def _eval_session_hijack(
     return matches
 
 
+def _eval_password_spraying(
+    events: list[AuthEvent], params: dict[str, Any]
+) -> list[RuleMatch]:
+    """Detect low-attempt cross-account failure bursts consistent with spraying."""
+    min_users = params.get("min_users", 4)
+    window_minutes = params.get("window_minutes", 45)
+    per_user_max = params.get("per_user_max", 2)
+    max_success_rate = params.get("max_success_rate", 0.15)
+    window = timedelta(minutes=window_minutes)
+
+    indexed_events = [
+        (idx, e)
+        for idx, e in enumerate(events)
+        if e.ip_address and e.user_id
+    ]
+    grouped: dict[str, list[tuple[int, AuthEvent]]] = defaultdict(list)
+    for idx, event in indexed_events:
+        grouped[event.ip_address].append((idx, event))
+
+    matches = []
+    for ip, ip_events in grouped.items():
+        ip_events.sort(key=lambda item: item[1].timestamp)
+        i = 0
+        while i < len(ip_events):
+            start_ts = ip_events[i][1].timestamp
+            window_events = [
+                item for item in ip_events[i:] if item[1].timestamp <= start_ts + window
+            ]
+            failed_events = [item for item in window_events if item[1].is_failure]
+            unique_users = {event.user_id for _, event in failed_events}
+            per_user_attempts: dict[str, int] = defaultdict(int)
+            for _, event in failed_events:
+                per_user_attempts[event.user_id] += 1
+            success_rate = (
+                sum(1 for _, event in window_events if event.success) / max(len(window_events), 1)
+            )
+            if (
+                len(unique_users) >= min_users
+                and failed_events
+                and max(per_user_attempts.values(), default=0) <= per_user_max
+                and success_rate <= max_success_rate
+            ):
+                matches.append(
+                    RuleMatch(
+                        rule_id="password_spraying",
+                        rule_name="Password Spraying",
+                        severity="critical",
+                        description=(
+                            f"{len(unique_users)} accounts saw low-attempt failures from IP {ip} "
+                            f"within {window_minutes} minutes"
+                        ),
+                        matched_events=[idx for idx, _ in window_events],
+                        matched_users=sorted(unique_users),
+                        timestamp=window_events[0][1].timestamp,
+                        details={
+                            "ip_address": ip,
+                            "unique_users": len(unique_users),
+                            "failed_attempt_count": len(failed_events),
+                            "max_attempts_per_user": max(per_user_attempts.values(), default=0),
+                            "success_rate": success_rate,
+                        },
+                    )
+                )
+                i += len(window_events)
+            else:
+                i += 1
+
+    return matches
+
+
+def _eval_low_and_slow_campaign(
+    events: list[AuthEvent], params: dict[str, Any]
+) -> list[RuleMatch]:
+    """Detect low-rate cross-account failure campaigns spread across a longer window."""
+    min_users = params.get("min_users", 3)
+    min_failures = params.get("min_failures", 5)
+    window_minutes = params.get("window_minutes", 180)
+    min_span_minutes = params.get("min_span_minutes", 30)
+    short_burst_minutes = params.get("short_burst_minutes", 15)
+    short_burst_cap = params.get("short_burst_cap", 3)
+    window = timedelta(minutes=window_minutes)
+    short_window = timedelta(minutes=short_burst_minutes)
+
+    indexed_events = [
+        (idx, e)
+        for idx, e in enumerate(events)
+        if e.ip_address and e.user_id and e.is_failure
+    ]
+    grouped: dict[str, list[tuple[int, AuthEvent]]] = defaultdict(list)
+    for idx, event in indexed_events:
+        grouped[event.ip_address].append((idx, event))
+
+    matches = []
+    for ip, ip_events in grouped.items():
+        ip_events.sort(key=lambda item: item[1].timestamp)
+        i = 0
+        while i < len(ip_events):
+            start_ts = ip_events[i][1].timestamp
+            campaign = [item for item in ip_events[i:] if item[1].timestamp <= start_ts + window]
+            if len(campaign) < min_failures:
+                i += 1
+                continue
+            unique_users = {event.user_id for _, event in campaign}
+            span_minutes = (
+                campaign[-1][1].timestamp - campaign[0][1].timestamp
+            ).total_seconds() / 60.0
+            short_burst_max = 0
+            for j in range(len(campaign)):
+                burst_start = campaign[j][1].timestamp
+                burst_count = sum(
+                    1
+                    for _, event in campaign[j:]
+                    if event.timestamp <= burst_start + short_window
+                )
+                short_burst_max = max(short_burst_max, burst_count)
+            if (
+                len(unique_users) >= min_users
+                and span_minutes >= min_span_minutes
+                and short_burst_max <= short_burst_cap
+            ):
+                matches.append(
+                    RuleMatch(
+                        rule_id="low_and_slow_campaign",
+                        rule_name="Low-and-Slow Campaign",
+                        severity="high",
+                        description=(
+                            f"{len(campaign)} failed attempts across {len(unique_users)} accounts "
+                            f"from IP {ip} over {span_minutes:.0f} minutes"
+                        ),
+                        matched_events=[idx for idx, _ in campaign],
+                        matched_users=sorted(unique_users),
+                        timestamp=campaign[0][1].timestamp,
+                        details={
+                            "ip_address": ip,
+                            "unique_users": len(unique_users),
+                            "failed_attempt_count": len(campaign),
+                            "span_minutes": span_minutes,
+                            "short_burst_max": short_burst_max,
+                        },
+                    )
+                )
+                i += len(campaign)
+            else:
+                i += 1
+
+    return matches
+
+
+def _eval_shared_infrastructure_burst(
+    events: list[AuthEvent], params: dict[str, Any]
+) -> list[RuleMatch]:
+    """Detect many users authenticating from the same IP+ASN in a short burst."""
+    min_users = params.get("min_users", 3)
+    window_minutes = params.get("window_minutes", 15)
+    require_failures = params.get("require_failures", False)
+    window = timedelta(minutes=window_minutes)
+
+    indexed = [
+        (idx, e)
+        for idx, e in enumerate(events)
+        if e.ip_address and e.asn and (not require_failures or e.is_failure)
+    ]
+    grouped: dict[tuple[str, str], list[tuple[int, AuthEvent]]] = defaultdict(list)
+    for idx, event in indexed:
+        grouped[(event.ip_address, event.asn)].append((idx, event))
+
+    matches = []
+    for (ip, asn), grouped_events in grouped.items():
+        grouped_events.sort(key=lambda item: item[1].timestamp)
+        i = 0
+        while i < len(grouped_events):
+            start_ts = grouped_events[i][1].timestamp
+            burst = [
+                item
+                for item in grouped_events[i:]
+                if item[1].timestamp <= start_ts + window
+            ]
+            unique_users = {event.user_id for _, event in burst}
+            if len(unique_users) >= min_users:
+                matches.append(
+                    RuleMatch(
+                        rule_id="shared_infrastructure_burst",
+                        rule_name="Shared Infrastructure Burst",
+                        severity="critical",
+                        description=(
+                            f"{len(unique_users)} users authenticated from IP {ip} "
+                            f"and ASN {asn} within {window_minutes} minutes"
+                        ),
+                        matched_events=[idx for idx, _ in burst],
+                        matched_users=sorted(unique_users),
+                        timestamp=burst[0][1].timestamp,
+                        details={
+                            "ip_address": ip,
+                            "asn": asn,
+                            "unique_users": len(unique_users),
+                        },
+                    )
+                )
+                i += len(burst)
+            else:
+                i += 1
+
+    return matches
+
+
+def _eval_session_hijack_context(
+    events: list[AuthEvent], params: dict[str, Any]
+) -> list[RuleMatch]:
+    """Detect possible session hijacking via IP or user-agent drift."""
+    min_context_changes = params.get("min_context_changes", 1)
+    matches = []
+    session_state: dict[str, dict[str, Any]] = {}
+
+    sorted_events = sorted(enumerate(events), key=lambda x: x[1].timestamp)
+
+    for idx, event in sorted_events:
+        sid = event.session_id
+        if not sid:
+            continue
+
+        state = session_state.get(sid)
+        if state is None:
+            session_state[sid] = {
+                "ip_address": event.ip_address,
+                "user_agent": event.user_agent,
+                "first_idx": idx,
+                "change_count": 0,
+            }
+            continue
+
+        context_changes = 0
+        if event.ip_address and state.get("ip_address") and event.ip_address != state["ip_address"]:
+            context_changes += 1
+        if event.user_agent and state.get("user_agent") and event.user_agent != state["user_agent"]:
+            context_changes += 1
+
+        if context_changes:
+            state["change_count"] = int(state.get("change_count", 0)) + context_changes
+            if state["change_count"] >= min_context_changes:
+                matches.append(
+                    RuleMatch(
+                        rule_id="session_hijack",
+                        rule_name="Session Hijack Suspected",
+                        severity="critical",
+                        description=(
+                            f"Session {sid[:16]}... for {event.user_id} "
+                            "shifted identity context mid-session"
+                        ),
+                        matched_events=[state["first_idx"], idx],
+                        matched_users=[event.user_id],
+                        timestamp=event.timestamp,
+                        details={
+                            "session_id": sid,
+                            "original_ip": state.get("ip_address"),
+                            "new_ip": event.ip_address,
+                            "original_user_agent": state.get("user_agent"),
+                            "new_user_agent": event.user_agent,
+                            "context_changes": state["change_count"],
+                        },
+                    )
+                )
+
+        if event.ip_address:
+            state["ip_address"] = event.ip_address
+        if event.user_agent:
+            state["user_agent"] = event.user_agent
+
+    return matches
+
+
 # ── Registration helper ──────────────────────────────────────────
 
 
@@ -523,12 +805,41 @@ def _register_all_builtins(engine: RuleEngine) -> None:
             RuleDefinition(
                 id="credential_stuffing",
                 name="Credential Stuffing",
-                description="Many users failing from same IP in short window",
+                description="High-rate multi-account failures from the same IP",
                 severity="critical",
                 tags=["authentication", "attack"],
-                params={"min_users": 3, "window_minutes": 15},
+                params={"min_users": 3, "min_attempts": 6, "window_minutes": 15, "max_success_rate": 0.2},
             ),
             _eval_credential_stuffing,
+        ),
+        (
+            RuleDefinition(
+                id="password_spraying",
+                name="Password Spraying",
+                description="Low-attempt cross-account failures from the same IP",
+                severity="critical",
+                tags=["authentication", "attack", "campaign"],
+                params={"min_users": 4, "window_minutes": 45, "per_user_max": 2, "max_success_rate": 0.15},
+            ),
+            _eval_password_spraying,
+        ),
+        (
+            RuleDefinition(
+                id="low_and_slow_campaign",
+                name="Low-and-Slow Campaign",
+                description="Cross-account failures that accumulate slowly to avoid burst thresholds",
+                severity="high",
+                tags=["authentication", "attack", "campaign"],
+                params={
+                    "min_users": 3,
+                    "min_failures": 5,
+                    "window_minutes": 180,
+                    "min_span_minutes": 30,
+                    "short_burst_minutes": 15,
+                    "short_burst_cap": 3,
+                },
+            ),
+            _eval_low_and_slow_campaign,
         ),
         (
             RuleDefinition(
@@ -578,12 +889,23 @@ def _register_all_builtins(engine: RuleEngine) -> None:
             RuleDefinition(
                 id="session_hijack",
                 name="Session Hijack Suspected",
-                description="IP address change during active session",
+                description="IP or user-agent drift during an active session",
                 severity="critical",
                 tags=["session", "attack"],
-                params={},
+                params={"min_context_changes": 1},
             ),
-            _eval_session_hijack,
+            _eval_session_hijack_context,
+        ),
+        (
+            RuleDefinition(
+                id="shared_infrastructure_burst",
+                name="Shared Infrastructure Burst",
+                description="Many users authenticate from the same IP and ASN in a short window",
+                severity="critical",
+                tags=["authentication", "infrastructure", "attack"],
+                params={"min_users": 3, "window_minutes": 15, "require_failures": False},
+            ),
+            _eval_shared_infrastructure_burst,
         ),
     ]
 

@@ -83,6 +83,485 @@ def _progress_bar(iterable, label: str = "Processing", length: int = 0):
         return click.progressbar(iterable, label=label, length=length)
 
 
+def _load_detector_securely(model_path: str, config=None):
+    from pathlib import Path
+
+    from chimera.engine.integrity import IntegrityManifest
+    from chimera.model import AnomalyDetector
+
+    model_file = Path(model_path)
+    manifest_path = model_file.parent / "integrity_manifest.json"
+    integrity_enabled = True if config is None else getattr(config.integrity, "enabled", True)
+
+    if manifest_path.exists():
+        manifest = IntegrityManifest(manifest_path)
+        return AnomalyDetector.load(model_file, manifest=manifest)
+
+    if integrity_enabled:
+        raise click.ClickException(
+            "Refusing to load model without integrity verification. "
+            f"Expected manifest at {manifest_path}."
+        )
+
+    return AnomalyDetector.load(model_file, allow_unverified=True)
+
+
+def _feature_engineer_from_config(config):
+    from chimera.feature_engineering import FeatureEngineer
+
+    if config is None:
+        return FeatureEngineer()
+
+    return FeatureEngineer(
+        max_history_days=config.features.max_history_days,
+        enable_entropy=config.features.enable_entropy,
+        enable_peer_group=config.features.enable_peer_group,
+        enable_impossible_travel=config.features.enable_impossible_travel,
+        enable_identity_research=getattr(config.identity_research, "enabled", False),
+        identity_session_gap_minutes=getattr(
+            config.identity_research, "session_gap_minutes", 45
+        ),
+        identity_burst_window_minutes=getattr(
+            config.identity_research, "burst_window_minutes", 5
+        ),
+        identity_relation_window_minutes=getattr(
+            config.identity_research, "relation_window_minutes", 15
+        ),
+        identity_max_shared_entity_users=getattr(
+            config.identity_research, "max_shared_entity_users", 10
+        ),
+    )
+
+
+def _scorer_from_config(config, threshold=None, contamination=None):
+    from chimera.scoring import AnomalyScorer
+
+    scoring_cfg = getattr(config, "scoring", None)
+    identity_cfg = getattr(config, "identity_research", None)
+    scorer_threshold = threshold if threshold is not None else getattr(scoring_cfg, "threshold", None)
+    scorer_contamination = contamination if contamination is not None else getattr(scoring_cfg, "contamination", 0.1)
+    identity_floor = None
+    if (
+        identity_cfg is not None
+        and getattr(identity_cfg, "enabled", False)
+        and getattr(identity_cfg, "scoring_hard_floor_enabled", False)
+    ):
+        identity_floor = getattr(identity_cfg, "takeover_hard_floor", 0.58)
+    return AnomalyScorer(
+        threshold=scorer_threshold,
+        contamination=scorer_contamination,
+        identity_hard_floor=identity_floor,
+        identity_hard_floor_column="identity_takeover_score",
+        identity_hard_floor_support_column="identity_takeover_support",
+        identity_hard_floor_support_threshold=getattr(
+            identity_cfg, "takeover_support_floor", 0.55
+        ) if identity_cfg is not None else 0.55,
+    )
+
+
+def _inject_identity_raw_scores(raw_scores, features_df):
+    research_columns = {
+        "identity_sequence": "identity_sequence_score",
+        "identity_relationship": "identity_relationship_score",
+        "identity_fusion": "identity_fusion_score",
+        "identity_campaign": "identity_campaign_score",
+        "identity_password_spray": "identity_password_spray_score",
+        "identity_low_and_slow": "identity_low_and_slow_score",
+        "identity_takeover_sequence": "identity_takeover_sequence_score",
+        "identity_takeover": "identity_takeover_score",
+        "identity_takeover_support": "identity_takeover_support",
+        "identity_mfa_bypass": "identity_mfa_bypass_suspicion",
+    }
+    for model_id, column in research_columns.items():
+        if column in features_df.columns:
+            raw_scores[model_id] = features_df[column].to_numpy(dtype=float)
+    return raw_scores
+
+
+def _identity_examples(results, limit: int = 5):
+    examples = []
+    ranked = sorted(
+        [r for r in results if r.research_reasons],
+        key=lambda r: (
+            r.research_signals.get("identity_takeover_score", 0.0),
+            r.research_signals.get("identity_fusion_score", 0.0),
+        ),
+        reverse=True,
+    )
+    for result in ranked[:limit]:
+        examples.append(
+            {
+                "event_index": result.event_index,
+                "user_id": result.user_id,
+                "timestamp": result.timestamp.isoformat() if result.timestamp else None,
+                "identity_fusion_score": result.research_signals.get(
+                    "identity_fusion_score", 0.0
+                ),
+                "identity_takeover_score": result.research_signals.get(
+                    "identity_takeover_score", 0.0
+                ),
+                "reasons": result.research_reasons[:3],
+            }
+        )
+    return examples
+
+
+def _benchmark_identity_examples(features_df, injected_test_events, ground_truth_mask, limit: int = 8):
+    examples = []
+    candidate_indices = [
+        idx
+        for idx, is_synth in enumerate(ground_truth_mask)
+        if is_synth and idx < len(features_df)
+    ]
+    ranked = sorted(
+        candidate_indices,
+        key=lambda idx: (
+            float(features_df.iloc[idx].get("identity_takeover_score", 0.0)),
+            float(features_df.iloc[idx].get("identity_fusion_score", 0.0)),
+            float(features_df.iloc[idx].get("identity_campaign_score", 0.0)),
+            float(features_df.iloc[idx].get("identity_session_concurrency", 0.0)),
+            float(features_df.iloc[idx].get("identity_geo_velocity_score", 0.0)),
+        ),
+        reverse=True,
+    )
+    for idx in ranked[:limit]:
+        event = injected_test_events[idx]
+        examples.append(
+            {
+                "event_index": idx,
+                "user_id": event.user_id,
+                "timestamp": event.timestamp.isoformat(),
+                "event_type": event.event_type,
+                "session_id": event.session_id,
+                "ip_address": event.ip_address,
+                "country_code": event.country_code,
+                "user_agent": event.user_agent,
+                "identity_fusion_score": float(features_df.iloc[idx].get("identity_fusion_score", 0.0)),
+                "identity_takeover_score": float(features_df.iloc[idx].get("identity_takeover_score", 0.0)),
+                "identity_session_concurrency": float(features_df.iloc[idx].get("identity_session_concurrency", 0.0)),
+                "identity_session_replay_burst": float(features_df.iloc[idx].get("identity_session_replay_burst", 0.0)),
+                "identity_session_fingerprint_drift": float(features_df.iloc[idx].get("identity_session_fingerprint_drift", 0.0)),
+                "identity_geo_velocity_score": float(features_df.iloc[idx].get("identity_geo_velocity_score", 0.0)),
+                "identity_password_spray_score": float(features_df.iloc[idx].get("identity_password_spray_score", 0.0)),
+                "identity_low_and_slow_score": float(features_df.iloc[idx].get("identity_low_and_slow_score", 0.0)),
+                "identity_campaign_score": float(features_df.iloc[idx].get("identity_campaign_score", 0.0)),
+                "identity_takeover_sequence_score": float(features_df.iloc[idx].get("identity_takeover_sequence_score", 0.0)),
+                "identity_reasons": features_df.iloc[idx].get("identity_reasons", []),
+            }
+        )
+    return examples
+
+
+def _is_truthy_marker(value) -> bool:
+    if value is True:
+        return True
+    if value in (False, None):
+        return False
+    if isinstance(value, float):
+        try:
+            import math
+
+            if math.isnan(value):
+                return False
+        except Exception:
+            return False
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y"}
+    return False
+
+
+def _slice_reports(
+    train_scores,
+    test_scores,
+    features_df,
+    ground_truth_mask,
+    engine_config,
+    requested_slices,
+):
+    from chimera.engine.pipeline import EnginePipeline
+    import numpy as np
+    import pandas as pd
+
+    requested = set(requested_slices or [])
+    if not requested:
+        return {}
+
+    train_ensemble = np.stack(list(train_scores.values()), axis=0).mean(axis=0)
+    test_ensemble = np.stack(list(test_scores.values()), axis=0).mean(axis=0)
+    baseline_threshold = float(np.percentile(train_ensemble, 95.0))
+    baseline_mask = test_ensemble >= baseline_threshold
+
+    pipeline = EnginePipeline.from_config(engine_config)
+    pipeline.fit(train_scores)
+    chimera_result = pipeline.score(test_scores, update_threshold=False)
+
+    zeros = pd.Series(0.0, index=features_df.index)
+    takeover_indicator = (
+        features_df.get("identity_takeover_score", zeros).to_numpy(dtype=float) >= 0.50
+    ) | (
+        features_df.get("identity_takeover_support", zeros).to_numpy(dtype=float) >= 0.55
+    )
+    coordination_indicator = (
+        features_df.get("identity_relationship_score", zeros).to_numpy(dtype=float) >= 0.20
+    ) | (
+        features_df.get("identity_sync_peer_count", zeros).to_numpy(dtype=float) >= 1.0
+    ) | (
+        features_df.get("identity_infra_burst_peer_count", zeros).to_numpy(dtype=float) >= 1.0
+    ) | (
+        features_df.get("identity_shared_ip_users", zeros).to_numpy(dtype=float) >= 1.0
+    ) | (
+        features_df.get("identity_shared_device_users", zeros).to_numpy(dtype=float) >= 1.0
+    )
+    infra_reuse_indicator = (
+        features_df.get("identity_shared_infra_pair_users", zeros).to_numpy(dtype=float) >= 1.0
+    ) | (
+        features_df.get("identity_infra_burst_peer_count", zeros).to_numpy(dtype=float) >= 1.0
+    )
+    mfa_bypass_indicator = (
+        features_df.get("identity_mfa_bypass_suspicion", zeros).to_numpy(dtype=float) >= 1.0
+    )
+    session_concurrency_indicator = (
+        features_df.get("identity_session_concurrency", zeros).to_numpy(dtype=float) >= 0.5
+    ) | (
+        features_df.get("identity_session_replay_burst", zeros).to_numpy(dtype=float) >= 0.5
+    ) | (
+        features_df.get("identity_session_fingerprint_drift", zeros).to_numpy(dtype=float) >= 0.5
+    )
+    geo_velocity_indicator = (
+        features_df.get("identity_geo_velocity_score", zeros).to_numpy(dtype=float) >= 0.5
+    ) | (
+        features_df.get("identity_geo_velocity_flag", zeros).to_numpy(dtype=float) >= 1.0
+    ) | (
+        features_df.get("identity_high_risk_country", zeros).to_numpy(dtype=float) >= 1.0
+    )
+    spray_indicator = (
+        features_df.get("identity_password_spray_score", zeros).to_numpy(dtype=float) >= 0.5
+    )
+    low_and_slow_indicator = (
+        features_df.get("identity_low_and_slow_score", zeros).to_numpy(dtype=float) >= 0.5
+    )
+    campaign_indicator = (
+        features_df.get("identity_campaign_score", zeros).to_numpy(dtype=float) >= 0.5
+    ) | coordination_indicator
+
+    slice_masks = {}
+    if "takeover_only" in requested:
+        slice_masks["takeover_only"] = ground_truth_mask & takeover_indicator
+    if "coordination_heavy" in requested:
+        slice_masks["coordination_heavy"] = ground_truth_mask & coordination_indicator
+    if "infra_reuse_heavy" in requested:
+        slice_masks["infra_reuse_heavy"] = ground_truth_mask & infra_reuse_indicator
+    if "mfa_bypass_focus" in requested:
+        slice_masks["mfa_bypass_focus"] = ground_truth_mask & mfa_bypass_indicator
+    if "session_concurrency_focus" in requested:
+        slice_masks["session_concurrency_focus"] = ground_truth_mask & session_concurrency_indicator
+    if "geo_velocity_focus" in requested:
+        slice_masks["geo_velocity_focus"] = ground_truth_mask & geo_velocity_indicator
+    if "spray_focus" in requested:
+        slice_masks["spray_focus"] = ground_truth_mask & spray_indicator
+    if "low_and_slow_focus" in requested:
+        slice_masks["low_and_slow_focus"] = ground_truth_mask & low_and_slow_indicator
+    if "campaign_focus" in requested:
+        slice_masks["campaign_focus"] = ground_truth_mask & campaign_indicator
+
+    reports = {}
+    for slice_name, mask in slice_masks.items():
+        n = int(mask.sum())
+        if n == 0:
+            reports[slice_name] = {"n_events": 0}
+            continue
+        reports[slice_name] = {
+            "n_events": n,
+            "baseline_detected_fraction": float((baseline_mask & mask).sum() / n),
+            "chimera_detected_fraction": float((chimera_result.anomaly_mask & mask).sum() / n),
+            "baseline_mean_score": float(np.mean(test_ensemble[mask])),
+            "chimera_mean_score": float(np.mean(chimera_result.ensemble_scores[mask])),
+            "chimera_hard_floor_hits": int(((chimera_result.ensemble_scores >= 1.0) & mask).sum()),
+        }
+    return reports
+
+
+def _run_benchmark_workflow(
+    *,
+    config,
+    events,
+    injection_type,
+    magnitude,
+    seed,
+    output_dir,
+    click_module,
+    dataset_label: str,
+):
+    import json
+    import time
+    from pathlib import Path
+
+    from chimera.data_loader import AuthLogLoader
+    from chimera.evaluation.injector import inject
+    from chimera.evaluation.runner import run_benchmark
+    from chimera.model import AnomalyDetector, ModelConfig
+    import numpy as np
+    import pandas as pd
+
+    click_module.echo(f"  Events          : {len(events):,}")
+
+    split = int(len(events) * 0.7)
+    train_events = list(events[:split])
+    test_events = list(events[split:])
+    if len(train_events) < 30:
+        raise ValueError(
+            f"{dataset_label} benchmark needs at least 30 training events after the train/test split; "
+            f"got {len(train_events)} from {len(events)} total events."
+        )
+    if not test_events:
+        raise ValueError(
+            f"{dataset_label} benchmark needs at least 1 test event after the train/test split."
+        )
+    test_records = [event.to_dict() for event in test_events]
+    injected_records = inject(
+        test_records,
+        type=injection_type,
+        magnitude=magnitude,
+        window=config.evaluation.injection_window,
+        seed=seed,
+    )
+    injected_test_events = AuthLogLoader().load_dataframe(pd.DataFrame(injected_records))
+    ground_truth_mask = np.array(
+        [
+            _is_truthy_marker(getattr(event, "raw_fields", {}).get("_synthetic", False))
+            for event in injected_test_events
+        ],
+        dtype=bool,
+    )
+
+    train_fe = _feature_engineer_from_config(config)
+    train_features_df = train_fe.fit_transform(train_events)
+    X_train = train_fe.get_numeric_features(train_features_df)
+
+    test_features_df = train_fe.transform(injected_test_events)
+    X_test = train_fe.get_numeric_features(test_features_df)
+
+    train_scores: dict[str, np.ndarray] = {}
+    test_scores: dict[str, np.ndarray] = {}
+    for det_name in (config.model.ensemble_detectors or ["isolation_forest", "lof"]):
+        if det_name == "isolation_forest":
+            det_config = ModelConfig(
+                n_estimators=config.model.n_estimators,
+                contamination=config.model.contamination,
+                scaler_type=config.model.scaler,
+                n_jobs=1,
+            )
+            det = AnomalyDetector(det_config, detector_name=det_name)
+        else:
+            det = AnomalyDetector.from_registry(det_name)
+        det.fit(X_train)
+        train_scores[det_name] = np.asarray(det.score_samples(X_train))
+        test_scores[det_name] = np.asarray(det.score_samples(X_test))
+
+    train_scores = _inject_identity_raw_scores(train_scores, train_features_df)
+    test_scores = _inject_identity_raw_scores(test_scores, test_features_df)
+
+    click_module.echo("  Running benchmark (baseline vs Chimera)...")
+    t0 = time.monotonic()
+    engine_config = {
+        "normalization": {"strategy": config.normalization.strategy},
+        "ensemble": {
+            "voting_strategy": "weighted",
+            "weights": {
+                "isolation_forest": 1.0,
+                "lof": 1.0,
+                "identity_sequence": 1.6,
+                "identity_relationship": 1.8,
+                "identity_fusion": 2.2,
+                "identity_takeover": 3.2,
+                "identity_takeover_support": 0.4,
+                "identity_mfa_bypass": 1.8,
+            },
+        },
+        "threshold": {"contamination": config.threshold.contamination},
+        "identity_research": {
+            "scoring_hard_floor_enabled": getattr(
+                config.identity_research, "scoring_hard_floor_enabled", False
+            ),
+            "takeover_hard_floor": getattr(
+                config.identity_research, "takeover_hard_floor", 0.58
+            ),
+            "takeover_support_floor": getattr(
+                config.identity_research, "takeover_support_floor", 0.55
+            ),
+            "hard_floor_model": "identity_takeover",
+            "hard_floor_support_model": "identity_takeover_support",
+        },
+    }
+
+    bench_result = run_benchmark(
+        raw_scores_train=train_scores,
+        raw_scores_test=test_scores,
+        events=[event.to_dict() for event in injected_test_events],
+        ground_truth_mask=ground_truth_mask,
+        injection_type=injection_type,
+        injection_magnitude=magnitude,
+        seed=seed,
+        engine_config=engine_config,
+    )
+    elapsed = time.monotonic() - t0
+
+    click_module.echo(f"\n  Benchmark complete in {elapsed:.2f}s\n")
+    click_module.echo("  " + "-" * 62)
+    for line in bench_result.summary_table().splitlines():
+        click_module.echo("  " + line)
+    click_module.echo("  " + "-" * 62)
+
+    out_path = Path(output_dir)
+    out_path.mkdir(parents=True, exist_ok=True)
+    report_path = out_path / "bench_report.json"
+    slice_reports = _slice_reports(
+        train_scores=train_scores,
+        test_scores=test_scores,
+        features_df=test_features_df,
+        ground_truth_mask=ground_truth_mask,
+        engine_config=engine_config,
+        requested_slices=config.evaluation.report_slices,
+    )
+
+    report_payload = {
+        "dataset": dataset_label,
+        "injection_type": bench_result.injection_type,
+        "injection_magnitude": bench_result.injection_magnitude,
+        "seed": bench_result.seed,
+        "n_events_original": bench_result.n_events_original,
+        "n_events_injected": bench_result.n_events_injected,
+        "elapsed_seconds": bench_result.elapsed_seconds,
+        "baseline": bench_result.baseline.to_dict(),
+        "chimera": bench_result.chimera.to_dict(),
+        "detection_lift_at_fpr": {
+            str(fpr): bench_result.chimera.detection_rate_at_fpr.get(fpr, 0.0)
+            - bench_result.baseline.detection_rate_at_fpr.get(fpr, 0.0)
+            for fpr in bench_result.chimera.detection_rate_at_fpr
+        },
+        "benchmark_slices": slice_reports,
+        "identity_examples": _benchmark_identity_examples(
+            test_features_df,
+            injected_test_events,
+            ground_truth_mask,
+        ),
+    }
+    with open(report_path, "w", encoding="utf-8") as f:
+        json.dump(report_payload, f, indent=2)
+
+    from chimera.reporting import ReportGenerator
+    report_generator = ReportGenerator(output_dir=out_path)
+    benchmark_markdown_path = report_generator.benchmark_to_markdown(
+        report_payload,
+        prefix="bench",
+    )
+
+    click_module.echo(f"\n  Report saved to: {report_path}")
+    click_module.echo(f"  Markdown       : {benchmark_markdown_path}")
+    click_module.echo("\n[OK] chimera bench complete.")
+    return report_path
+
+
 # ── Main CLI group ───────────────────────────────────────────────
 
 
@@ -176,7 +655,7 @@ def train(
 
     # Feature engineering
     click.echo("[*] Engineering features...")
-    engineer = FeatureEngineer()
+    engineer = _feature_engineer_from_config(cfg)
     features_df = engineer.fit_transform(events)
     numeric_features = engineer.get_numeric_features(features_df)
     click.echo(f"   Extracted {numeric_features.shape[1]} features")
@@ -191,6 +670,7 @@ def train(
             model_config.n_estimators = n_estimators
         if scaler:
             model_config.scaler_type = scaler
+        model_config.n_jobs = 1
         det = AnomalyDetector(config=model_config, detector_name="isolation_forest")
     else:
         det = AnomalyDetector.from_registry(detector_name)
@@ -198,8 +678,14 @@ def train(
     det.fit(numeric_features, feature_names=engineer.get_feature_names())
 
     # Save
-    det.save(output)
-    det.save(output)
+    manifest = None
+    cfg = ctx.obj.get("config")
+    if cfg is not None and getattr(cfg.integrity, "enabled", True):
+        from chimera.engine.integrity import IntegrityManifest
+
+        output_path = Path(output)
+        manifest = IntegrityManifest(output_path.parent / "integrity_manifest.json")
+    det.save(output, manifest=manifest)
     click.echo(f"[+] Model saved to {output}")
 
     # Summary
@@ -242,9 +728,11 @@ def detect(
 
     _echo_header("Chimera Detect")
 
+    config = ctx.obj.get("config")
+
     # Load model
     click.echo(f"[*] Loading model from {model_path}...")
-    detector = AnomalyDetector.load(model_path)
+    detector = _load_detector_securely(model_path, config=config)
 
     # Load data
     click.echo(f"[*] Loading data from {input_path}...")
@@ -254,17 +742,18 @@ def detect(
 
     # Feature engineering
     click.echo("[*] Engineering features...")
-    engineer = FeatureEngineer()
+    engineer = _feature_engineer_from_config(config)
     features_df = engineer.fit_transform(events)
     numeric_features = engineer.get_numeric_features(features_df)
 
     # ML scoring
     click.echo("[*] Scoring events...")
-    scorer = AnomalyScorer(
+    scorer = _scorer_from_config(
+        config,
         threshold=threshold,
         contamination=contamination,
     )
-    results = scorer.score(events, numeric_features, detector)
+    results = scorer.score(events, features_df, detector)
 
     # Rule engine
     rule_matches = []
@@ -290,10 +779,15 @@ def detect(
             "anomaly_count": anomaly_count,
             "anomaly_rate": anomaly_count / max(len(results), 1),
             "rule_matches": len(rule_matches),
+            "identity_research_enabled": bool(
+                ctx.obj.get("config")
+                and getattr(ctx.obj["config"].identity_research, "enabled", False)
+            ),
         },
         "events": [r.to_dict() for r in results],
         "user_summaries": [s.to_dict() for s in user_summaries],
         "rule_matches": [m.to_dict() for m in rule_matches],
+        "identity_examples": _identity_examples(results),
     }
 
     output_path = Path(output)
@@ -597,7 +1091,7 @@ def baseline(ctx: click.Context, input_path: str, output: str) -> None:
     click.echo(f"   Loaded {len(events)} events")
 
     click.echo("[*] Building user baselines...")
-    engineer = FeatureEngineer()
+    engineer = _feature_engineer_from_config(ctx.obj.get("config"))
     engineer.fit(events)
 
     baselines = {}
@@ -667,8 +1161,10 @@ def watch(
 
     _echo_header("Chimera Watch")
 
+    config = ctx.obj.get("config")
+
     click.echo(f"[*] Loading model from {model_path}...")
-    detector = AnomalyDetector.load(model_path)
+    detector = _load_detector_securely(model_path, config=config)
 
     watch_path = Path(watch_dir)
     out_path = Path(output_dir)
@@ -693,12 +1189,12 @@ def watch(
                     loader = AuthLogLoader()
                     events = loader.load(log_file)
 
-                    engineer = FeatureEngineer()
+                    engineer = _feature_engineer_from_config(config)
                     features_df = engineer.fit_transform(events)
                     numeric = engineer.get_numeric_features(features_df)
 
-                    scorer = AnomalyScorer()
-                    results = scorer.score(events, numeric, detector)
+                    scorer = _scorer_from_config(config)
+                    results = scorer.score(events, features_df, detector)
 
                     anomalies = sum(1 for r in results if r.is_anomaly)
                     click.echo(
@@ -730,11 +1226,9 @@ def watch(
 @click.argument("model_path", type=click.Path(exists=True))
 def info(model_path: str) -> None:
     """Show metadata about a trained model."""
-    from chimera.model import AnomalyDetector
-
     _echo_header("Chimera Model Info")
 
-    detector = AnomalyDetector.load(model_path)
+    detector = _load_detector_securely(model_path, config=None)
     info_data = detector.get_model_info()
 
     for key, value in info_data.items():
@@ -744,6 +1238,452 @@ def info(model_path: str) -> None:
                 click.echo(f"    {k}: {v}")
         else:
             click.echo(f"  {key}: {value}")
+
+
+# ── run ──────────────────────────────────────────────────────────
+
+
+@cli.command("run")
+@click.option(
+    "--config", "-c",
+    "config_path",
+    default="chimera.yaml",
+    show_default=True,
+    type=click.Path(exists=True),
+    help="Path to Chimera YAML/JSON config file.",
+)
+@click.option(
+    "--input", "-i",
+    "input_path",
+    required=True,
+    type=click.Path(exists=True),
+    help="Path to authentication log file (CSV or JSON).",
+)
+@click.option(
+    "--model", "-m",
+    "model_path",
+    default=None,
+    type=click.Path(),
+    help="Path to trained model (.joblib). If absent, trains in-situ on the input.",
+)
+@click.option(
+    "--output", "-o",
+    "output_dir",
+    default="./chimera_output",
+    show_default=True,
+    type=click.Path(),
+    help="Directory for detection output and robustness report.",
+)
+@click.pass_context
+def run_cmd(
+    ctx: click.Context,
+    config_path: str,
+    input_path: str,
+    model_path: Optional[str],
+    output_dir: str,
+) -> None:
+    """Run the full v0.5 engine pipeline from a config file.
+
+    Loads the config, runs feature engineering, fits the normalization
+    engine (or loads a pre-trained one), scores all events using the
+    ensemble voter + dynamic threshold, and writes a robustness report.
+
+    \b
+    Example:
+        chimera run --config chimera.yaml --input auth.csv --output ./results
+    """
+    import json
+    import time
+    from pathlib import Path
+
+    _echo_header("Chimera v0.5 — Run")
+
+    # 1. Load config
+    try:
+        from chimera.config import ChimeraConfig
+        config = ChimeraConfig.load(config_path)
+        click.echo(f"  Config     : {config_path}")
+        click.echo(f"  Seed       : {config.seed}")
+    except Exception as e:
+        click.echo(f"ERROR: Failed to load config: {e}", err=True)
+        raise SystemExit(1)
+
+    # 2. Load data
+    click.echo(f"  Input      : {input_path}")
+    try:
+        from chimera.data_loader import DataLoader
+        loader = DataLoader(config)
+        events = loader.load(input_path)
+        click.echo(f"  Events     : {len(events):,}")
+    except Exception as e:
+        click.echo(f"ERROR: Failed to load data: {e}", err=True)
+        raise SystemExit(1)
+
+    if len(events) < 60:
+        click.echo("WARNING: Fewer than 60 events — normalizer requires 30+ per model.", err=True)
+
+    # 3. Feature engineering
+    click.echo("  Engineering features...")
+    try:
+        import numpy as np
+        fe = _feature_engineer_from_config(config)
+        features_df = fe.fit_transform(events)
+        X = fe.get_numeric_features(features_df)
+        click.echo(f"  Features   : {X.shape[1]} dimensions, {X.shape[0]} samples")
+    except Exception as e:
+        click.echo(f"ERROR: Feature engineering failed: {e}", err=True)
+        raise SystemExit(1)
+
+    # 4. Per-model raw scores
+    click.echo("  Scoring with detectors...")
+    try:
+        from chimera.model import AnomalyDetector, ModelConfig
+        import numpy as np
+
+        raw_scores: dict[str, np.ndarray] = {}
+        detector_names = config.model.ensemble_detectors or ["isolation_forest", "lof"]
+
+        for det_name in detector_names:
+            if model_path:
+                det = _load_detector_securely(model_path, config=config)
+            else:
+                if det_name == "isolation_forest":
+                    det_config = ModelConfig(
+                        n_estimators=config.model.n_estimators,
+                        contamination=config.model.contamination,
+                        scaler_type=config.model.scaler,
+                        n_jobs=1,
+                    )
+                    det = AnomalyDetector(det_config, detector_name=det_name)
+                else:
+                    det = AnomalyDetector.from_registry(det_name)
+                det.fit(X)
+
+            scores = det.score_samples(X)
+            raw_scores[det_name] = np.asarray(scores)
+            click.echo(f"    {det_name}: mean={raw_scores[det_name].mean():.4f}")
+
+        raw_scores = _inject_identity_raw_scores(raw_scores, features_df)
+        if getattr(config.identity_research, "enabled", False):
+            click.echo("    identity_research: additive sequence and relationship signals enabled")
+    except Exception as e:
+        click.echo(f"ERROR: Detector scoring failed: {e}", err=True)
+        raise SystemExit(1)
+
+    # 5. Engine pipeline (normalization → voting → threshold)
+    click.echo("  Running engine pipeline...")
+    try:
+        from chimera.engine.pipeline import EnginePipeline
+
+        engine_config = {
+            "normalization": {
+                "strategy": config.normalization.strategy,
+                "low_variance_threshold": config.normalization.low_variance_threshold,
+                "collapse_epsilon": config.normalization.collapse_epsilon,
+                "quantile_range": config.normalization.quantile_range,
+            },
+            "ensemble": {
+                "voting_strategy": config.ensemble_v3.voting_strategy,
+                "trim_fraction": config.ensemble_v3.trim_fraction,
+                "weights": config.ensemble_v3.weights,
+            },
+            "threshold": {
+                "contamination": config.threshold.contamination,
+                "recalc_window": config.threshold.recalc_window,
+                "max_drift_history": config.threshold.max_drift_history,
+            },
+        }
+
+        pipeline = EnginePipeline.from_config(engine_config)
+        # In run mode: use the same data for fit and score (unsupervised, no labels)
+        # For production, fit on historical data and score the new window.
+        pipeline.fit(raw_scores)
+        result = pipeline.score(raw_scores)
+
+        n_anom = int(result.anomaly_mask.sum())
+        click.echo(f"  Threshold  : {result.threshold:.6f}")
+        click.echo(f"  Anomalies  : {n_anom:,} / {len(result.ensemble_scores):,} events "
+                   f"({100.0 * n_anom / max(len(result.ensemble_scores), 1):.1f}%)")
+        click.echo(f"  H(entropy) : {result.disagreement_entropy.mean():.4f} (mean inter-model disagreement)")
+        click.echo(f"  Instability: {result.threshold_instability:.6f} (drift metric)")
+    except Exception as e:
+        click.echo(f"ERROR: Engine pipeline failed: {e}", err=True)
+        raise SystemExit(1)
+
+    # 6. Write output
+    out_path = Path(output_dir)
+    out_path.mkdir(parents=True, exist_ok=True)
+
+    report = {
+        "threshold": result.threshold,
+        "threshold_instability": result.threshold_instability,
+        "n_events": len(result.ensemble_scores),
+        "n_anomalies": n_anom,
+        "disagreement_entropy_mean": float(result.disagreement_entropy.mean()),
+        "score_variance_mean": float(result.score_variance.mean()),
+        "anomaly_indices": [int(i) for i in np.where(result.anomaly_mask)[0]],
+        "ensemble_scores": result.ensemble_scores.tolist(),
+        "identity_research": {
+            "enabled": bool(getattr(config.identity_research, "enabled", False)),
+            "channels": [
+                model_id
+                for model_id in raw_scores
+                if model_id.startswith("identity_")
+            ],
+            "examples": [
+                {
+                    "event_index": int(index),
+                    "user_id": str(features_df.iloc[index]["user_id"]),
+                    "identity_fusion_score": float(
+                        features_df.iloc[index].get("identity_fusion_score", 0.0)
+                    ),
+                    "reasons": features_df.iloc[index].get("identity_reasons", []),
+                }
+                for index in np.where(result.anomaly_mask)[0][:5]
+                if "identity_reasons" in features_df.columns
+            ],
+        },
+    }
+
+    report_path = out_path / "chimera_run_report.json"
+    with open(report_path, "w", encoding="utf-8") as f:
+        json.dump(report, f, indent=2)
+
+    click.echo(f"\n  Report saved to: {report_path}")
+    click.echo("\n[OK] chimera run complete.")
+
+
+# ── bench ─────────────────────────────────────────────────────────
+
+
+@cli.command("bench")
+@click.option(
+    "--config", "-c",
+    "config_path",
+    default="chimera.yaml",
+    show_default=True,
+    type=click.Path(exists=True),
+    help="Path to Chimera YAML/JSON config file.",
+)
+@click.option(
+    "--input", "-i",
+    "input_path",
+    required=True,
+    type=click.Path(exists=True),
+    help="Path to authentication log file (CSV or JSON) for benchmarking.",
+)
+@click.option(
+    "--injection-type",
+    "injection_type",
+    default="session_hijack",
+    show_default=True,
+    type=click.Choice(
+        [
+            "volume_spike",
+            "temporal_shift",
+            "credential_stuffing",
+            "asn_shift",
+            "burst_attack",
+            "session_hijack",
+            "mfa_bypass",
+            "low_and_slow",
+            "password_spraying",
+            "coordinated_campaign",
+            "identity_drift",
+            "temporal_jitter",
+        ],
+        case_sensitive=False,
+    ),
+    help="Synthetic anomaly injection type for ground-truth evaluation.",
+)
+@click.option(
+    "--magnitude",
+    "magnitude",
+    default=3.0,
+    show_default=True,
+    type=float,
+    help="Injection intensity (interpretation varies by type).",
+)
+@click.option(
+    "--seed",
+    "seed",
+    default=42,
+    show_default=True,
+    type=int,
+    help="Random seed for deterministic injection.",
+)
+@click.option(
+    "--output", "-o",
+    "output_dir",
+    default="./chimera_bench",
+    show_default=True,
+    type=click.Path(),
+    help="Directory for benchmark report.",
+)
+@click.pass_context
+def bench(
+    ctx: click.Context,
+    config_path: str,
+    input_path: str,
+    injection_type: str,
+    magnitude: float,
+    seed: int,
+    output_dir: str,
+) -> None:
+    """Benchmark the v0.5 engine against a naive baseline using synthetic injection.
+
+    Loads real events, injects synthetic anomalies for ground truth, then
+    runs two pipelines side by side:
+      - Baseline: raw mean of per-model scores, no normalization.
+      - Chimera:  normalized → voted → dynamic threshold.
+
+    Reports threshold drift, disagreement entropy, and detection rates at FPR.
+
+    \b
+    Example:
+        chimera bench --config chimera.yaml --input auth.csv --injection-type burst_attack
+    """
+    import json
+    import time
+    from pathlib import Path
+
+    _echo_header("Chimera v0.5 — Benchmark")
+
+    # Load config
+    try:
+        from chimera.config import ChimeraConfig
+        config = ChimeraConfig.load(config_path)
+    except Exception as e:
+        click.echo(f"ERROR: Config load failed: {e}", err=True)
+        raise SystemExit(1)
+
+    click.echo(f"  Config          : {config_path}")
+    click.echo(f"  Injection type  : {injection_type}  magnitude={magnitude}  seed={seed}")
+    config.identity_research.enabled = True
+
+    try:
+        from chimera.data_loader import DataLoader
+
+        loader = DataLoader(config)
+        events = loader.load(input_path)
+    except Exception as e:
+        click.echo(f"ERROR: Data / feature load failed: {e}", err=True)
+        raise SystemExit(1)
+    try:
+        _run_benchmark_workflow(
+            config=config,
+            events=events,
+            injection_type=injection_type,
+            magnitude=magnitude,
+            seed=seed,
+            output_dir=output_dir,
+            click_module=click,
+            dataset_label="generic_auth",
+        )
+    except Exception as e:
+        click.echo(f"ERROR: Benchmark failed: {e}", err=True)
+        raise SystemExit(1)
+
+
+@cli.command("bench-lanl")
+@click.option(
+    "--config", "-c",
+    "config_path",
+    default="chimera.yaml",
+    show_default=True,
+    type=click.Path(exists=True),
+    help="Path to Chimera YAML/JSON config file.",
+)
+@click.option(
+    "--input", "-i",
+    "input_path",
+    required=True,
+    type=click.Path(exists=True),
+    help="Path to LANL/CERT auth.txt file.",
+)
+@click.option(
+    "--limit",
+    default=50000,
+    show_default=True,
+    type=int,
+    help="Maximum number of LANL auth events to stream into the benchmark.",
+)
+@click.option(
+    "--injection-type",
+    "injection_type",
+    default="session_hijack",
+    show_default=True,
+    type=click.Choice(
+        [
+            "volume_spike",
+            "temporal_shift",
+            "credential_stuffing",
+            "asn_shift",
+            "burst_attack",
+            "session_hijack",
+            "mfa_bypass",
+            "low_and_slow",
+            "password_spraying",
+            "coordinated_campaign",
+            "identity_drift",
+            "temporal_jitter",
+        ],
+        case_sensitive=False,
+    ),
+    help="Synthetic anomaly injection type for ground-truth evaluation.",
+)
+@click.option("--magnitude", default=3.0, show_default=True, type=float)
+@click.option("--seed", default=42, show_default=True, type=int)
+@click.option(
+    "--output", "-o",
+    "output_dir",
+    default="./chimera_bench_lanl",
+    show_default=True,
+    type=click.Path(),
+    help="Directory for benchmark report.",
+)
+def bench_lanl(
+    config_path: str,
+    input_path: str,
+    limit: int,
+    injection_type: str,
+    magnitude: float,
+    seed: int,
+    output_dir: str,
+) -> None:
+    """Benchmark Chimera on a streamed slice of the LANL/CERT auth dataset."""
+    _echo_header("Chimera v0.5 — LANL Benchmark")
+    try:
+        from chimera.config import ChimeraConfig
+        from chimera.data_loader import AuthLogLoader
+
+        config = ChimeraConfig.load(config_path)
+        config.identity_research.enabled = True
+        loader = AuthLogLoader()
+        events = list(loader.iter_lanl_auth(input_path, limit=limit))
+    except Exception as e:
+        click.echo(f"ERROR: LANL load failed: {e}", err=True)
+        raise SystemExit(1)
+
+    click.echo(f"  Config          : {config_path}")
+    click.echo(f"  Input           : {input_path}")
+    click.echo(f"  Limit           : {limit:,}")
+    click.echo(f"  Injection type  : {injection_type}  magnitude={magnitude}  seed={seed}")
+
+    try:
+        _run_benchmark_workflow(
+            config=config,
+            events=events,
+            injection_type=injection_type,
+            magnitude=magnitude,
+            seed=seed,
+            output_dir=output_dir,
+            click_module=click,
+            dataset_label="lanl_auth",
+        )
+    except Exception as e:
+        click.echo(f"ERROR: LANL benchmark failed: {e}", err=True)
+        raise SystemExit(1)
 
 
 # ── Entry point ──────────────────────────────────────────────────

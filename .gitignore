@@ -51,6 +51,17 @@ htmlcov/
 output/
 reports/
 test_output/
+results/
+
+# Experiment artifacts (never commit trained models or generated data)
+e2e_*/
+val_*/
+validation.csv
+data/
+*.ndjson
+
+# Chimera backups
+.chimera_backups/
 
 # OS
 .DS_Store

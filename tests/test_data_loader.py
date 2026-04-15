@@ -127,3 +127,26 @@ class TestAuthLogLoader:
         assert stats["total_events"] == 3
         assert stats["unique_users"] == 2
         assert "event_types" in stats
+
+    def test_load_lanl_auth_txt(self):
+        lines = [
+            "time,user,src_user,src_computer,dst_computer,auth_type,logon_type,auth_orient,success",
+            "0,U1@DOM,U1@DOM,PC1,SRV1,Kerberos,Network,LogOn,Success",
+            "60,U2@DOM,U2@DOM,PC2,SRV2,NTLM,Network,LogOn,Fail",
+        ]
+        with tempfile.NamedTemporaryFile(mode="w", suffix="auth.txt", delete=False) as f:
+            f.write("\n".join(lines))
+            temp_path = f.name
+
+        try:
+            loader = AuthLogLoader()
+            events = loader.load(temp_path)
+
+            assert len(events) == 2
+            assert events[0].user_id == "U1"
+            assert events[0].event_type == "login"
+            assert events[1].event_type == "failed_login"
+            assert events[1].auth_method == "NTLM"
+            assert events[1].raw_fields["destination_computer"] == "SRV2"
+        finally:
+            Path(temp_path).unlink()

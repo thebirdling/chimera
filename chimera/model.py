@@ -165,15 +165,31 @@ class AnomalyDetector:
 
     # ── Persistence ──────────────────────────────────────────────
 
-    def save(self, path: Union[str, Path]) -> None:
+    def save(
+        self,
+        path: Union[str, Path],
+        manifest: Optional[Any] = None,
+    ) -> None:
         path = Path(path)
         if path.suffix == "":
             path = path / "chimera_model.joblib"
-        self._detector.save(path)
+        self._detector.save(path, manifest=manifest)
 
     @classmethod
-    def load(cls, path: Union[str, Path]) -> "AnomalyDetector":
-        detector = BaseDetector.load(path)
+    def load(
+        cls,
+        path: Union[str, Path],
+        *,
+        manifest: Optional[Any] = None,
+        expected_digest: Optional[str] = None,
+        allow_unverified: bool = False,
+    ) -> "AnomalyDetector":
+        detector = BaseDetector.load(
+            path,
+            manifest=manifest,
+            expected_digest=expected_digest,
+            allow_unverified=allow_unverified,
+        )
         instance = cls.__new__(cls)
         instance.config = ModelConfig()
         instance._detector = detector

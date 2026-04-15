@@ -191,6 +191,8 @@ class AuthLogLoader:
         
         if suffix == ".csv":
             return self._load_csv(path)
+        elif suffix == ".txt" and "auth" in path.name.lower():
+            return self._load_lanl_auth(path)
         elif suffix == ".json":
             return self._load_json(path)
         elif suffix == ".jsonl":
@@ -260,6 +262,68 @@ class AuthLogLoader:
         df = pd.DataFrame(records)
         events = self.load_dataframe(df)
         logger.info(f"Loaded {len(events)} events from JSONL: {path}")
+        return events
+
+    def iter_lanl_auth(
+        self,
+        path: Union[str, Path],
+        *,
+        base_time: Optional[datetime] = None,
+        limit: Optional[int] = None,
+    ) -> Iterator[AuthEvent]:
+        """Stream LANL/CERT authentication records from the canonical auth.txt format."""
+        path = Path(path)
+        base_dt = base_time or datetime(2010, 1, 1, 0, 0, 0)
+
+        with open(path, "r", encoding="utf-8") as f:
+            for line_no, line in enumerate(f):
+                if limit is not None and line_no >= limit:
+                    break
+                line = line.strip()
+                if not line:
+                    continue
+                if line_no == 0 and line.lower().startswith("time,"):
+                    continue
+                parts = line.split(",")
+                if len(parts) < 9:
+                    logger.warning("Skipping malformed LANL auth line %d", line_no + 1)
+                    continue
+                try:
+                    offset_seconds = int(parts[0])
+                except ValueError:
+                    logger.warning("Skipping LANL auth line with bad offset at %d", line_no + 1)
+                    continue
+
+                user_id = parts[1].split("@")[0]
+                source_user = parts[2]
+                source_computer = parts[3]
+                destination_computer = parts[4]
+                auth_type = parts[5]
+                logon_type = parts[6]
+                auth_orientation = parts[7]
+                success_token = parts[8].strip().upper()
+                success = success_token in {"SUCCESS", "SUCC", "TRUE", "1"}
+
+                yield AuthEvent(
+                    timestamp=base_dt + pd.to_timedelta(offset_seconds, unit="s"),
+                    user_id=user_id,
+                    event_type=AuthEvent.EVENT_LOGIN if success else AuthEvent.EVENT_FAILED_LOGIN,
+                    device_fingerprint=source_computer or None,
+                    auth_method=auth_type or None,
+                    success=success,
+                    raw_fields={
+                        "source_user": source_user,
+                        "source_computer": source_computer,
+                        "destination_computer": destination_computer,
+                        "logon_type": logon_type,
+                        "auth_orientation": auth_orientation,
+                        "lanl_success_token": success_token,
+                    },
+                )
+
+    def _load_lanl_auth(self, path: Path) -> list[AuthEvent]:
+        events = list(self.iter_lanl_auth(path))
+        logger.info(f"Loaded {len(events)} events from LANL auth file: {path}")
         return events
     
     def _detect_fields(self, columns: pd.Index) -> dict[str, Optional[str]]:
@@ -476,3 +540,17 @@ class AuthLogLoader:
                     stats["event_types"].get(event.event_type, 0) + 1
         
         return stats
+
+
+class DataLoader(AuthLogLoader):
+    """Compatibility wrapper used by the v0.3+ CLI entrypoints.
+
+    The newer CLI paths expect a ``DataLoader(config)`` interface, while the
+    canonical loader implementation historically lived in ``AuthLogLoader``.
+    This wrapper preserves the existing loader behavior and accepts an
+    optional Chimera config object for future extension.
+    """
+
+    def __init__(self, config: Optional[Any] = None):
+        super().__init__()
+        self.config = config

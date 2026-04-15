@@ -1,0 +1,62 @@
+{
+  "preset": "publishable_identity",
+  "families": [
+    "session_hijack"
+  ],
+  "limit": 50000,
+  "seed": 42,
+  "magnitude": 3.0,
+  "summary": [
+    {
+      "attack_family": "session_hijack",
+      "report": "C:\\Users\\USER\\Desktop\\GitHub Repos\\chimera\\tmp_lanl_release_prep\\session_hijack\\bench_report.json",
+      "lift_at_0_01_fpr": 0.0,
+      "takeover_only": {
+        "n_events": 61,
+        "baseline_detected_fraction": 1.0,
+        "chimera_detected_fraction": 1.0,
+        "baseline_mean_score": 3.9000712004081715,
+        "chimera_mean_score": 1.0,
+        "chimera_hard_floor_hits": 61
+      },
+      "coordination_heavy": {
+        "n_events": 61,
+        "baseline_detected_fraction": 1.0,
+        "chimera_detected_fraction": 1.0,
+        "baseline_mean_score": 3.896012603895641,
+        "chimera_mean_score": 0.996092604615005,
+        "chimera_hard_floor_hits": 60
+      },
+      "campaign_focus": {
+        "n_events": 61,
+        "baseline_detected_fraction": 1.0,
+        "chimera_detected_fraction": 1.0,
+        "baseline_mean_score": 3.896012603895641,
+        "chimera_mean_score": 0.996092604615005,
+        "chimera_hard_floor_hits": 60
+      },
+      "infra_reuse_heavy": {
+        "n_events": 0
+      },
+      "mfa_bypass_focus": {
+        "n_events": 0
+      },
+      "session_concurrency_focus": {
+        "n_events": 61,
+        "baseline_detected_fraction": 1.0,
+        "chimera_detected_fraction": 1.0,
+        "baseline_mean_score": 3.9000712004081715,
+        "chimera_mean_score": 1.0,
+        "chimera_hard_floor_hits": 61
+      },
+      "geo_velocity_focus": {
+        "n_events": 7,
+        "baseline_detected_fraction": 1.0,
+        "chimera_detected_fraction": 1.0,
+        "baseline_mean_score": 1.1045842771301662,
+        "chimera_mean_score": 1.0,
+        "chimera_hard_floor_hits": 7
+      }
+    }
+  ]
+}
