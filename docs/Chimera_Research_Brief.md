@@ -1,6 +1,6 @@
 # Chimera Research Brief
 
-**Version**: 0.5.1  
+**Version**: 0.6.0  
 **Date**: April 2026
 
 ## 1. Abstract
@@ -64,6 +64,7 @@ Chimera’s research architecture now consists of five interacting layers:
 3. unsupervised baseline detectors
 4. robust ensemble scoring and thresholding
 5. sequence, relationship, and campaign-aware identity reasoning
+6. case-level aggregation and portable runtime contracts
 
 This means Chimera no longer treats every authentication event as an isolated point. It increasingly treats events as parts of:
 
@@ -101,6 +102,7 @@ The current phase adds deterministic identity reasoning primitives:
 - password-spraying indicators
 - low-and-slow coordinated abuse indicators
 - ordered takeover progression from initial session establishment through reuse and privileged action
+- case aggregation into reviewable identity cases
 
 The design choice is deliberate: Chimera prefers deterministic, inspectable features over deep neural sequence models at this stage.
 
@@ -185,6 +187,7 @@ Chimera v0.5.1 includes several important safety boundaries:
 - runtime paths preserve local operation assumptions
 - native acceleration is optional and backed by Python fallbacks
 - the research platform does not depend on external graph infrastructure
+- stable embedding outputs do not bypass integrity-verified model loading
 
 This does not make Chimera a hardened public SaaS platform. It means the project is serious about the trust assumptions within its intended offline research environment.
 

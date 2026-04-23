@@ -8,6 +8,7 @@ import pandas as pd
 import tempfile
 from pathlib import Path
 
+from chimera.engine.integrity import IntegrityManifest
 from chimera.registry import DetectorRegistry
 from chimera.detectors.base import BaseDetector, DetectorConfig, DetectorMetadata
 from chimera.detectors.isolation_forest import IsolationForestDetector, IsolationForestConfig
@@ -91,9 +92,10 @@ class TestIsolationForestDetector:
         det.fit(sample_features)
 
         save_path = tmp_path / "test_if.joblib"
-        det.save(save_path)
+        manifest = IntegrityManifest(tmp_path / "integrity_manifest.json")
+        det.save(save_path, manifest=manifest)
 
-        loaded = BaseDetector.load(save_path)
+        loaded = BaseDetector.load(save_path, manifest=manifest)
         assert isinstance(loaded, IsolationForestDetector)
         assert loaded._is_fitted
 
@@ -134,9 +136,10 @@ class TestLOFDetector:
         det.fit(sample_features)
 
         save_path = tmp_path / "test_lof.joblib"
-        det.save(save_path)
+        manifest = IntegrityManifest(tmp_path / "integrity_manifest.json")
+        det.save(save_path, manifest=manifest)
 
-        loaded = BaseDetector.load(save_path)
+        loaded = BaseDetector.load(save_path, manifest=manifest)
         assert isinstance(loaded, LOFDetector)
 
 
@@ -170,8 +173,9 @@ class TestEnsembleDetector:
         det.fit(sample_features)
 
         save_path = tmp_path / "test_ensemble.joblib"
-        det.save(save_path)
+        manifest = IntegrityManifest(tmp_path / "integrity_manifest.json")
+        det.save(save_path, manifest=manifest)
 
-        loaded = BaseDetector.load(save_path)
+        loaded = BaseDetector.load(save_path, manifest=manifest)
         assert isinstance(loaded, EnsembleDetector)
         assert len(loaded.detectors) == 2

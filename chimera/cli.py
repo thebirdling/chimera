@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import json
 import logging
-import sys
 import time
 from pathlib import Path
 from typing import Optional
@@ -26,29 +25,9 @@ from typing import Optional
 import click
 
 from chimera import __version__
+from chimera.ux import make_live_console
 
 logger = logging.getLogger("chimera")
-
-_FIRE_BANNER = [
-    r"   (  )   (   )  )",
-    r"    ) (   )  (  (",
-    r"    ( )  (    ) )",
-    r"    _____________",
-    r"   <_____________> ___",
-    r"   |             |/ _ \\",
-    r"   |   CHIMERA   | | | |",
-    r"   |   v0.5.1    | |_| |",
-    r"___|             |\\___/",
-    r"/    \___________/    \\",
-    r"\\_____________________/",
-]
-
-_FIRE_FRAMES = [
-    " .  (  ) ",
-    " .'. )(. ",
-    " : .'.:  ",
-    " '.: :'  ",
-]
 
 
 def _setup_logging(verbose: bool) -> None:
@@ -72,34 +51,13 @@ def _echo_header(title: str) -> None:
         click.echo(f"{'=' * 50}\n")
 
 
-def _echo_brand_banner(title: str, subtitle: str = "") -> None:
-    """Render Chimera's branded startup banner."""
-    click.echo()
-    for line in _FIRE_BANNER:
-        click.echo(f"  {line}")
-    click.echo(f"  {title}")
-    if subtitle:
-        click.echo(f"  {subtitle}")
-    click.echo()
-
-
-def _animate_stage(label: str, steps: int = 10, delay: float = 0.03) -> None:
-    """Render a tiny ASCII loader without slowing normal CLI use too much."""
-    if not sys.stdout.isatty():
-        click.echo(f"[*] {label}...")
-        return
-
-    for idx in range(steps):
-        frame = _FIRE_FRAMES[idx % len(_FIRE_FRAMES)]
-        click.echo(f"\r{frame} {label}...", nl=False)
-        time.sleep(delay)
-    click.echo(f"\r[OK] {label}".ljust(len(label) + 12))
-
-
-def _command_intro(title: str, subtitle: str = "") -> None:
+def _command_intro(title: str, subtitle: str = "", *, json_output: bool = False):
     """Show a branded intro for interactive commands."""
-    _echo_brand_banner(title, subtitle)
-    _animate_stage("warming the furnace")
+    live = make_live_console(json_output=json_output)
+    live.banner(title, subtitle)
+    with live.stage("warming the furnace"):
+        pass
+    return live
 
 
 def _echo_table(headers: list[str], rows: list[list[str]], title: str = "") -> None:
@@ -617,7 +575,11 @@ def _run_benchmark_workflow(
 
 
 @click.group()
-@click.version_option(version=__version__, prog_name="chimera")
+@click.version_option(
+    version=__version__,
+    prog_name="Chimera",
+    message="%(prog)s %(version)s",
+)
 @click.option("--verbose", "-v", is_flag=True, help="Enable verbose output")
 @click.option(
     "--config",
@@ -760,6 +722,7 @@ def train(
 @click.option("--contamination", type=float, default=0.1, help="Auto-threshold contamination rate")
 @click.option("--format", "fmt", type=click.Choice(["json", "csv", "all"]), default="json")
 @click.option("--rules/--no-rules", "use_rules", default=True, help="Enable/disable rule engine")
+@click.option("--json", "json_output", is_flag=True, help="Emit stable JSON envelope to stdout.")
 @click.pass_context
 def detect(
     ctx: click.Context,
@@ -770,108 +733,57 @@ def detect(
     contamination: float,
     fmt: str,
     use_rules: bool,
+    json_output: bool,
 ) -> None:
     """Detect anomalies in authentication logs using a trained model."""
-    from chimera.data_loader import AuthLogLoader
-    from chimera.feature_engineering import FeatureEngineer
-    from chimera.model import AnomalyDetector
-    from chimera.scoring import AnomalyScorer
+    from chimera.api import detect_events
 
-    _command_intro("Chimera Detect", "scoring identity behavior against a trained local model")
+    live = _command_intro(
+        "Chimera Detect",
+        "scoring identity behavior against a trained local model",
+        json_output=json_output,
+    )
 
     config = ctx.obj.get("config")
+    with live.stage("scoring identity behavior"):
+        envelope = detect_events(
+            input_path=input_path,
+            model_path=model_path,
+            output_path=output,
+            config=config,
+            threshold=threshold,
+            contamination=contamination,
+            use_rules=use_rules,
+        )
 
-    # Load model
-    click.echo(f"[*] Loading model from {model_path}...")
-    detector = _load_detector_securely(model_path, config=config)
+    if json_output:
+        click.echo(json.dumps(envelope.to_dict(), indent=2))
+        return
 
-    # Load data
-    click.echo(f"[*] Loading data from {input_path}...")
-    loader = AuthLogLoader()
-    events = loader.load(input_path)
-    click.echo(f"   Loaded {len(events)} events")
-
-    # Feature engineering
-    click.echo("[*] Engineering features...")
-    engineer = _feature_engineer_from_config(config)
-    features_df = engineer.fit_transform(events)
-    numeric_features = engineer.get_numeric_features(features_df)
-
-    # ML scoring
-    click.echo("[*] Scoring events...")
-    scorer = _scorer_from_config(
-        config,
-        threshold=threshold,
-        contamination=contamination,
+    payload = envelope.payload
+    metadata = payload.get("metadata", {})
+    click.echo(
+        f"\n[?] Results: {metadata.get('anomaly_count', 0)} anomalies out of "
+        f"{metadata.get('total_events', 0)} events"
     )
-    results = scorer.score(events, features_df, detector)
+    click.echo(f"[+] Results saved to {output}")
 
-    # Rule engine
-    rule_matches = []
-    if use_rules:
-        click.echo("[*] Evaluating rules...")
-        from chimera.rules.engine import RuleEngine
-
-        engine = RuleEngine()
-        engine.load_builtin_rules()
-        rule_matches = engine.evaluate(events)
-        click.echo(f"   {len(rule_matches)} rule matches found")
-
-    # Generate user summaries
-    user_summaries = scorer.summarize_by_user(results)
-
-    # Save results
-    anomaly_count = sum(1 for r in results if r.is_anomaly)
-    click.echo(f"\n[?] Results: {anomaly_count} anomalies out of {len(results)} events")
-
-    output_data = {
-        "metadata": {
-            "total_events": len(results),
-            "anomaly_count": anomaly_count,
-            "anomaly_rate": anomaly_count / max(len(results), 1),
-            "rule_matches": len(rule_matches),
-            "identity_research_enabled": bool(
-                ctx.obj.get("config")
-                and getattr(ctx.obj["config"].identity_research, "enabled", False)
-            ),
-        },
-        "events": [r.to_dict() for r in results],
-        "user_summaries": [s.to_dict() for s in user_summaries],
-        "rule_matches": [m.to_dict() for m in rule_matches],
-        "identity_examples": _identity_examples(results),
-    }
-
-    output_path = Path(output)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(output_data, f, indent=2, default=str)
-
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(output_data, f, indent=2, default=str)
-
-    click.echo(f"[+] Results saved to {output_path}")
-
-    # Summary table
+    user_summaries = payload.get("user_summaries", [])
     if user_summaries:
         sorted_summaries = sorted(
-            user_summaries, key=lambda s: s.anomaly_count, reverse=True
+            user_summaries, key=lambda summary: summary.get("anomaly_count", 0), reverse=True
         )[:10]
         rows = [
             [
-                s.user_id,
-                str(s.total_events),
-                str(s.anomaly_count),
-                f"{s.anomaly_rate:.1%}",
-                s.risk_level,
+                summary.get("user_id", ""),
+                str(summary.get("total_events", 0)),
+                str(summary.get("anomaly_count", 0)),
+                f"{summary.get('anomaly_rate', 0.0):.1%}",
+                summary.get("risk_level", "unknown"),
             ]
-            for s in sorted_summaries
+            for summary in sorted_summaries
         ]
-        _echo_table(
-            ["User", "Events", "Anomalies", "Rate", "Risk"],
-            rows,
-            "Top Users by Anomaly Count",
-        )
+        _echo_table(["User", "Events", "Anomalies", "Rate", "Risk"], rows, "Top Users by Anomaly Count")
 
 
 # ── report ───────────────────────────────────────────────────────
@@ -891,6 +803,7 @@ def report(
     prefix: str,
 ) -> None:
     """Generate reports from detection results."""
+    from chimera.contracts import unwrap_envelope
     from chimera.reporting import ReportGenerator
     from chimera.scoring import AnomalyResult, UserSummary
 
@@ -898,11 +811,12 @@ def report(
 
     click.echo(f"[*] Loading results from {results_path}...")
     with open(results_path, "r", encoding="utf-8") as f:
-        data = json.load(f)
+        data = unwrap_envelope(json.load(f))
 
     events = data.get("events", [])
     summaries = data.get("user_summaries", [])
     rule_matches = data.get("rule_matches", [])
+    cases = data.get("cases", [])
     metadata = data.get("metadata", {})
 
     results = [AnomalyResult.from_dict(e) for e in events]
@@ -927,7 +841,7 @@ def report(
                 generated["csv_users"] = p2
         elif f == "json":
             p = generator.to_json(
-                results, user_summaries, score_distribution, prefix=prefix
+                results, user_summaries, score_distribution, rule_matches, cases, prefix=prefix
             )
             generated["json"] = p
         elif f == "markdown":
@@ -936,6 +850,7 @@ def report(
                 user_summaries,
                 score_distribution,
                 rule_matches=rule_matches,
+                cases=cases,
                 prefix=prefix,
             )
             generated["markdown"] = p
@@ -1088,6 +1003,7 @@ def export_cmd(
     prefix: str,
 ) -> None:
     """Export results in SIEM-compatible formats (CEF, Syslog, STIX)."""
+    from chimera.contracts import unwrap_envelope
     from chimera.scoring import AnomalyResult
     from chimera.rules.engine import RuleMatch as RuleMatchDef
     from chimera.exporters import CEFExporter, SyslogExporter, STIXExporter
@@ -1096,7 +1012,7 @@ def export_cmd(
 
     click.echo(f"[*] Loading results from {results_path}...")
     with open(results_path, "r", encoding="utf-8") as f:
-        data = json.load(f)
+        data = unwrap_envelope(json.load(f))
 
     results = [AnomalyResult.from_dict(e) for e in data.get("events", [])]
 
@@ -1275,13 +1191,24 @@ def watch(
 
 @cli.command()
 @click.argument("model_path", type=click.Path(exists=True))
-def info(model_path: str) -> None:
+@click.option("--json", "json_output", is_flag=True, help="Emit stable JSON envelope to stdout.")
+def info(model_path: str, json_output: bool) -> None:
     """Show metadata about a trained model."""
-    _command_intro("Chimera Model Info", "inspecting a verified local detector artifact")
+    from chimera.api import inspect_model
 
-    detector = _load_detector_securely(model_path, config=None)
-    info_data = detector.get_model_info()
+    live = _command_intro(
+        "Chimera Model Info",
+        "inspecting a verified local detector artifact",
+        json_output=json_output,
+    )
 
+    with live.stage("verifying model artifact"):
+        envelope = inspect_model(model_path)
+    if json_output:
+        click.echo(json.dumps(envelope.to_dict(), indent=2))
+        return
+
+    info_data = envelope.payload.get("model_info", {})
     for key, value in info_data.items():
         if isinstance(value, dict):
             click.echo(f"\n  {key}:")
@@ -1289,6 +1216,35 @@ def info(model_path: str) -> None:
                 click.echo(f"    {k}: {v}")
         else:
             click.echo(f"  {key}: {value}")
+
+
+@cli.command()
+@click.option("--config", "config_path", type=click.Path(exists=True), default=None, help="Optional config path to validate.")
+@click.option("--model", "model_path", type=click.Path(exists=True), default=None, help="Optional model path to verify.")
+@click.option("--json", "json_output", is_flag=True, help="Emit stable JSON envelope to stdout.")
+def doctor(config_path: Optional[str], model_path: Optional[str], json_output: bool) -> None:
+    """Run portable runtime diagnostics for Chimera."""
+    from chimera.api import doctor as doctor_api
+
+    live = _command_intro(
+        "Chimera Doctor",
+        "portable runtime diagnostics for packaging and embedding",
+        json_output=json_output,
+    )
+
+    with live.stage("probing runtime health"):
+        envelope = doctor_api(config_path=config_path, model_path=model_path)
+    if json_output:
+        click.echo(json.dumps(envelope.to_dict(), indent=2))
+        return
+
+    payload = envelope.payload
+    click.echo(f"  Overall status: {payload.get('overall_status', 'unknown')}")
+    rows = [
+        [check.get("name", ""), check.get("status", ""), check.get("detail", "")]
+        for check in payload.get("checks", [])
+    ]
+    _echo_table(["Check", "Status", "Detail"], rows, "Doctor Checks")
 
 
 # ── run ──────────────────────────────────────────────────────────
@@ -1325,6 +1281,7 @@ def info(model_path: str) -> None:
     type=click.Path(),
     help="Directory for detection output and robustness report.",
 )
+@click.option("--json", "json_output", is_flag=True, help="Emit stable JSON envelope to stdout.")
 @click.pass_context
 def run_cmd(
     ctx: click.Context,
@@ -1332,8 +1289,9 @@ def run_cmd(
     input_path: str,
     model_path: Optional[str],
     output_dir: str,
+    json_output: bool,
 ) -> None:
-    """Run the full v0.5.1 engine pipeline from a config file.
+    """Run the full v0.6.0 engine pipeline from a config file.
 
     Loads the config, runs feature engineering, fits the normalization
     engine (or loads a pre-trained one), scores all events using the
@@ -1343,164 +1301,41 @@ def run_cmd(
     Example:
         chimera run --config chimera.yaml --input auth.csv --output ./results
     """
-    import json
-    import time
-    from pathlib import Path
+    from chimera.api import run_pipeline
 
-    _command_intro("Chimera v0.5.1 Run", "structured identity-behavior reasoning in motion")
+    live = _command_intro(
+        "Chimera v0.6.0 Run",
+        "portable identity-behavior reasoning in motion",
+        json_output=json_output,
+    )
 
-    # 1. Load config
-    try:
-        from chimera.config import ChimeraConfig
-        config = ChimeraConfig.load(config_path)
-        click.echo(f"  Config     : {config_path}")
-        click.echo(f"  Seed       : {config.seed}")
-    except Exception as e:
-        click.echo(f"ERROR: Failed to load config: {e}", err=True)
-        raise SystemExit(1)
+    with live.stage("running the research pipeline"):
+        envelope = run_pipeline(
+            config_path=config_path,
+            input_path=input_path,
+            model_path=model_path,
+            output_dir=output_dir,
+        )
+    if json_output:
+        click.echo(json.dumps(envelope.to_dict(), indent=2))
+        return
 
-    # 2. Load data
+    payload = envelope.payload
+    click.echo(f"  Config     : {config_path}")
     click.echo(f"  Input      : {input_path}")
-    try:
-        from chimera.data_loader import DataLoader
-        loader = DataLoader(config)
-        events = loader.load(input_path)
-        click.echo(f"  Events     : {len(events):,}")
-    except Exception as e:
-        click.echo(f"ERROR: Failed to load data: {e}", err=True)
-        raise SystemExit(1)
-
-    if len(events) < 60:
-        click.echo("WARNING: Fewer than 60 events — normalizer requires 30+ per model.", err=True)
-
-    # 3. Feature engineering
-    click.echo("  Engineering features...")
-    try:
-        import numpy as np
-        fe = _feature_engineer_from_config(config)
-        features_df = fe.fit_transform(events)
-        X = fe.get_numeric_features(features_df)
-        click.echo(f"  Features   : {X.shape[1]} dimensions, {X.shape[0]} samples")
-    except Exception as e:
-        click.echo(f"ERROR: Feature engineering failed: {e}", err=True)
-        raise SystemExit(1)
-
-    # 4. Per-model raw scores
-    click.echo("  Scoring with detectors...")
-    try:
-        from chimera.model import AnomalyDetector, ModelConfig
-        import numpy as np
-
-        raw_scores: dict[str, np.ndarray] = {}
-        detector_names = config.model.ensemble_detectors or ["isolation_forest", "lof"]
-
-        for det_name in detector_names:
-            if model_path:
-                det = _load_detector_securely(model_path, config=config)
-            else:
-                if det_name == "isolation_forest":
-                    det_config = ModelConfig(
-                        n_estimators=config.model.n_estimators,
-                        contamination=config.model.contamination,
-                        scaler_type=config.model.scaler,
-                        n_jobs=1,
-                    )
-                    det = AnomalyDetector(det_config, detector_name=det_name)
-                else:
-                    det = AnomalyDetector.from_registry(det_name)
-                det.fit(X)
-
-            scores = det.score_samples(X)
-            raw_scores[det_name] = np.asarray(scores)
-            click.echo(f"    {det_name}: mean={raw_scores[det_name].mean():.4f}")
-
-        raw_scores = _inject_identity_raw_scores(raw_scores, features_df)
-        if getattr(config.identity_research, "enabled", False):
-            click.echo("    identity_research: additive sequence and relationship signals enabled")
-    except Exception as e:
-        click.echo(f"ERROR: Detector scoring failed: {e}", err=True)
-        raise SystemExit(1)
-
-    # 5. Engine pipeline (normalization → voting → threshold)
-    click.echo("  Running engine pipeline...")
-    try:
-        from chimera.engine.pipeline import EnginePipeline
-
-        engine_config = {
-            "normalization": {
-                "strategy": config.normalization.strategy,
-                "low_variance_threshold": config.normalization.low_variance_threshold,
-                "collapse_epsilon": config.normalization.collapse_epsilon,
-                "quantile_range": config.normalization.quantile_range,
-            },
-            "ensemble": {
-                "voting_strategy": config.ensemble_v3.voting_strategy,
-                "trim_fraction": config.ensemble_v3.trim_fraction,
-                "weights": config.ensemble_v3.weights,
-            },
-            "threshold": {
-                "contamination": config.threshold.contamination,
-                "recalc_window": config.threshold.recalc_window,
-                "max_drift_history": config.threshold.max_drift_history,
-            },
-        }
-
-        pipeline = EnginePipeline.from_config(engine_config)
-        # In run mode: use the same data for fit and score (unsupervised, no labels)
-        # For production, fit on historical data and score the new window.
-        pipeline.fit(raw_scores)
-        result = pipeline.score(raw_scores)
-
-        n_anom = int(result.anomaly_mask.sum())
-        click.echo(f"  Threshold  : {result.threshold:.6f}")
-        click.echo(f"  Anomalies  : {n_anom:,} / {len(result.ensemble_scores):,} events "
-                   f"({100.0 * n_anom / max(len(result.ensemble_scores), 1):.1f}%)")
-        click.echo(f"  H(entropy) : {result.disagreement_entropy.mean():.4f} (mean inter-model disagreement)")
-        click.echo(f"  Instability: {result.threshold_instability:.6f} (drift metric)")
-    except Exception as e:
-        click.echo(f"ERROR: Engine pipeline failed: {e}", err=True)
-        raise SystemExit(1)
-
-    # 6. Write output
-    out_path = Path(output_dir)
-    out_path.mkdir(parents=True, exist_ok=True)
-
-    report = {
-        "threshold": result.threshold,
-        "threshold_instability": result.threshold_instability,
-        "n_events": len(result.ensemble_scores),
-        "n_anomalies": n_anom,
-        "disagreement_entropy_mean": float(result.disagreement_entropy.mean()),
-        "score_variance_mean": float(result.score_variance.mean()),
-        "anomaly_indices": [int(i) for i in np.where(result.anomaly_mask)[0]],
-        "ensemble_scores": result.ensemble_scores.tolist(),
-        "identity_research": {
-            "enabled": bool(getattr(config.identity_research, "enabled", False)),
-            "channels": [
-                model_id
-                for model_id in raw_scores
-                if model_id.startswith("identity_")
-            ],
-            "examples": [
-                {
-                    "event_index": int(index),
-                    "user_id": str(features_df.iloc[index]["user_id"]),
-                    "identity_fusion_score": float(
-                        features_df.iloc[index].get("identity_fusion_score", 0.0)
-                    ),
-                    "reasons": features_df.iloc[index].get("identity_reasons", []),
-                }
-                for index in np.where(result.anomaly_mask)[0][:5]
-                if "identity_reasons" in features_df.columns
-            ],
-        },
-    }
-
-    report_path = out_path / "chimera_run_report.json"
-    with open(report_path, "w", encoding="utf-8") as f:
-        json.dump(report, f, indent=2)
-
-    click.echo(f"\n  Report saved to: {report_path}")
+    click.echo(f"  Threshold  : {payload.get('threshold', 0.0):.6f}")
+    click.echo(
+        f"  Anomalies  : {payload.get('n_anomalies', 0):,} / {payload.get('n_events', 0):,} events"
+    )
+    click.echo(
+        f"  H(entropy) : {payload.get('disagreement_entropy_mean', 0.0):.4f} "
+        "(mean inter-model disagreement)"
+    )
+    click.echo(
+        f"  Instability: {payload.get('threshold_instability', 0.0):.6f} (drift metric)"
+    )
+    click.echo(f"  Cases      : {payload.get('case_summary', {}).get('count', 0)}")
+    click.echo(f"\n  Report saved to: {payload.get('artifacts', {}).get('report', output_dir)}")
     click.echo("\n[OK] chimera run complete.")
 
 
@@ -1571,6 +1406,7 @@ def run_cmd(
     type=click.Path(),
     help="Directory for benchmark report.",
 )
+@click.option("--json", "json_output", is_flag=True, help="Emit stable JSON envelope to stdout.")
 @click.pass_context
 def bench(
     ctx: click.Context,
@@ -1580,8 +1416,9 @@ def bench(
     magnitude: float,
     seed: int,
     output_dir: str,
+    json_output: bool,
 ) -> None:
-    """Benchmark the v0.5.1 engine against a naive baseline using synthetic injection.
+    """Benchmark the v0.6.0 engine against a naive baseline using synthetic injection.
 
     Loads real events, injects synthetic anomalies for ground truth, then
     runs two pipelines side by side:
@@ -1594,46 +1431,35 @@ def bench(
     Example:
         chimera bench --config chimera.yaml --input auth.csv --injection-type burst_attack
     """
-    import json
-    import time
-    from pathlib import Path
+    from chimera.api import run_benchmark
 
-    _command_intro("Chimera v0.5.1 Benchmark", "measuring lift against controlled identity attacks")
+    live = _command_intro(
+        "Chimera v0.6.0 Benchmark",
+        "measuring lift against controlled identity attacks",
+        json_output=json_output,
+    )
 
-    # Load config
-    try:
-        from chimera.config import ChimeraConfig
-        config = ChimeraConfig.load(config_path)
-    except Exception as e:
-        click.echo(f"ERROR: Config load failed: {e}", err=True)
-        raise SystemExit(1)
-
-    click.echo(f"  Config          : {config_path}")
-    click.echo(f"  Injection type  : {injection_type}  magnitude={magnitude}  seed={seed}")
-    config.identity_research.enabled = True
-
-    try:
-        from chimera.data_loader import DataLoader
-
-        loader = DataLoader(config)
-        events = loader.load(input_path)
-    except Exception as e:
-        click.echo(f"ERROR: Data / feature load failed: {e}", err=True)
-        raise SystemExit(1)
-    try:
-        _run_benchmark_workflow(
-            config=config,
-            events=events,
+    with live.stage("benchmarking controlled identity attacks"):
+        envelope = run_benchmark(
+            config_path=config_path,
+            input_path=input_path,
             injection_type=injection_type,
             magnitude=magnitude,
             seed=seed,
             output_dir=output_dir,
-            click_module=click,
             dataset_label="generic_auth",
         )
-    except Exception as e:
-        click.echo(f"ERROR: Benchmark failed: {e}", err=True)
-        raise SystemExit(1)
+    if json_output:
+        click.echo(json.dumps(envelope.to_dict(), indent=2))
+        return
+
+    payload = envelope.payload
+    click.echo(f"  Config          : {config_path}")
+    click.echo(f"  Injection type  : {injection_type}  magnitude={magnitude}  seed={seed}")
+    click.echo(f"  Cases detected  : {payload.get('case_metrics', {}).get('detected_case_count', 0)}")
+    click.echo(f"\n  Report saved to: {payload.get('artifacts', {}).get('report', output_dir)}")
+    click.echo(f"  Markdown       : {payload.get('artifacts', {}).get('markdown', '')}")
+    click.echo("\n[OK] chimera bench complete.")
 
 
 @cli.command("bench-lanl")
@@ -1693,6 +1519,7 @@ def bench(
     type=click.Path(),
     help="Directory for benchmark report.",
 )
+@click.option("--json", "json_output", is_flag=True, help="Emit stable JSON envelope to stdout.")
 def bench_lanl(
     config_path: str,
     input_path: str,
@@ -1701,43 +1528,90 @@ def bench_lanl(
     magnitude: float,
     seed: int,
     output_dir: str,
+    json_output: bool,
 ) -> None:
     """Benchmark Chimera on a streamed slice of the LANL/CERT auth dataset."""
-    _command_intro("Chimera v0.5.1 LANL Benchmark", "running publishable offline benchmark slices")
-    try:
-        from chimera.config import ChimeraConfig
-        from chimera.data_loader import AuthLogLoader
+    from chimera.api import run_benchmark
 
-        config = ChimeraConfig.load(config_path)
-        config.identity_research.enabled = True
-        loader = AuthLogLoader()
-        events = list(loader.iter_lanl_auth(input_path, limit=limit))
-    except Exception as e:
-        click.echo(f"ERROR: LANL load failed: {e}", err=True)
-        raise SystemExit(1)
+    live = _command_intro(
+        "Chimera v0.6.0 LANL Benchmark",
+        "running publishable offline benchmark slices",
+        json_output=json_output,
+    )
 
-    click.echo(f"  Config          : {config_path}")
-    click.echo(f"  Input           : {input_path}")
-    click.echo(f"  Limit           : {limit:,}")
-    click.echo(f"  Injection type  : {injection_type}  magnitude={magnitude}  seed={seed}")
-
-    try:
-        _run_benchmark_workflow(
-            config=config,
-            events=events,
+    with live.stage("running streamed LANL benchmark"):
+        envelope = run_benchmark(
+            config_path=config_path,
+            input_path=input_path,
             injection_type=injection_type,
             magnitude=magnitude,
             seed=seed,
             output_dir=output_dir,
-            click_module=click,
             dataset_label="lanl_auth",
+            limit=limit,
+            lanl_mode=True,
         )
-    except Exception as e:
-        click.echo(f"ERROR: LANL benchmark failed: {e}", err=True)
-        raise SystemExit(1)
+    if json_output:
+        click.echo(json.dumps(envelope.to_dict(), indent=2))
+        return
+
+    payload = envelope.payload
+    click.echo(f"  Config          : {config_path}")
+    click.echo(f"  Input           : {input_path}")
+    click.echo(f"  Limit           : {limit:,}")
+    click.echo(f"  Injection type  : {injection_type}  magnitude={magnitude}  seed={seed}")
+    click.echo(f"  Cases detected  : {payload.get('case_metrics', {}).get('detected_case_count', 0)}")
+    click.echo(f"\n  Report saved to: {payload.get('artifacts', {}).get('report', output_dir)}")
+    click.echo(f"  Markdown       : {payload.get('artifacts', {}).get('markdown', '')}")
+    click.echo("\n[OK] chimera bench complete.")
 
 
 # ── Entry point ──────────────────────────────────────────────────
+
+
+@cli.command("agent-review")
+@click.option(
+    "--input",
+    "input_path",
+    required=True,
+    type=click.Path(exists=True),
+    help="Path to a Chimera JSON artifact or an output directory containing one.",
+)
+@click.option(
+    "--output", "-o",
+    "output_dir",
+    default=None,
+    type=click.Path(),
+    help="Optional directory for persisted agent review outputs.",
+)
+@click.option("--json", "json_output", is_flag=True, help="Emit stable JSON envelope to stdout.")
+def agent_review_cmd(input_path: str, output_dir: Optional[str], json_output: bool) -> None:
+    """Generate a deterministic offline analyst-agent review from Chimera artifacts."""
+    from chimera.api import review_artifact
+
+    live = _command_intro(
+        "Chimera Agent Review",
+        "offline analyst guidance for local systems and package workflows",
+        json_output=json_output,
+    )
+
+    with live.stage("building local analyst review"):
+        envelope = review_artifact(input_path=input_path, output_dir=output_dir)
+    if json_output:
+        click.echo(json.dumps(envelope.to_dict(), indent=2))
+        return
+
+    review = envelope.payload.get("review", {})
+    click.echo(f"  Source        : {review.get('source_path', input_path)}")
+    click.echo(f"  Posture       : {review.get('posture', 'observe')}")
+    click.echo(f"  Total cases   : {review.get('case_overview', {}).get('total_cases', 0)}")
+    click.echo(f"  Critical cases: {review.get('case_overview', {}).get('critical_cases', 0)}")
+    click.echo(f"\n  Summary       : {review.get('summary', '')}")
+    artifacts = envelope.payload.get("artifacts", {})
+    if artifacts:
+        click.echo(f"\n  Review JSON   : {artifacts.get('report', '')}")
+        click.echo(f"  Review MD     : {artifacts.get('markdown', '')}")
+    click.echo("\n[OK] chimera agent-review complete.")
 
 
 def main() -> None:

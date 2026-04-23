@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from chimera.config import ChimeraConfig
+from chimera.contracts import unwrap_envelope
 from chimera.reporting import ReportGenerator
 
 
@@ -115,7 +116,7 @@ def main() -> None:
 
         report_path = family_out / "bench_report.json"
         with report_path.open("r", encoding="utf-8") as handle:
-            report = json.load(handle)
+            report = unwrap_envelope(json.load(handle))
 
         summaries.append(
             {

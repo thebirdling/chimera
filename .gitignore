@@ -41,9 +41,11 @@ env/
 .coverage
 htmlcov/
 .tox/
+.hypothesis/
 .mypy_cache/
 .ruff_cache/
 coverage.xml
+pip-wheel-metadata/
 
 # Model files
 *.joblib
@@ -72,6 +74,10 @@ tmp_*/
 
 # Native / Rust build output
 rust/graph_kernels/target/
+rust/**/target/
+chimera/_native/rust_graph_kernels*.dll
+chimera/_native/librust_graph_kernels*.so
+chimera/_native/librust_graph_kernels*.dylib
 
 # Chimera backups
 .chimera_backups/

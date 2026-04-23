@@ -45,7 +45,7 @@ class ModelConfig:
     contamination: Any = "auto"
     max_features: Any = 1.0
     bootstrap: bool = False
-    n_jobs: int = -1
+    n_jobs: int = 1
     random_state: int = 42
     verbose: int = 0
     warm_start: bool = False

@@ -17,6 +17,7 @@ class TestChimeraConfig:
         assert cfg.features.enable_entropy is True
         assert cfg.rules.enabled is True
         assert cfg.scoring.auto_threshold is True
+        assert cfg.runtime_contract.write_artifact_manifest is True
 
     def test_to_dict(self):
         cfg = ChimeraConfig()
@@ -26,6 +27,7 @@ class TestChimeraConfig:
         assert "rules" in d
         assert "scoring" in d
         assert "output" in d
+        assert "runtime_contract" in d
         assert "identity_research" in d
         assert "evaluation" in d
 

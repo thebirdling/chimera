@@ -107,7 +107,13 @@ class IntegrityManifest:
         if key_path is None:
             key_path = self.manifest_path.parent / _KEY_NAME
         self.key_path = Path(key_path)
-        self._key: bytes = _load_or_create_key(self.key_path)
+        self._key_invalid = False
+        try:
+            self._key = _load_or_create_key(self.key_path)
+        except ValueError as exc:
+            logger.critical("[integrity] %s", exc)
+            self._key = b"\x00" * _KEY_LEN
+            self._key_invalid = True
         self._entries: dict[str, str] = {}
         self._load()
 
@@ -130,6 +136,10 @@ class IntegrityManifest:
         str
             SHA-256 hex digest.
         """
+        if self._key_invalid:
+            raise ValueError(
+                f"Integrity key is corrupt at {self.key_path}; refusing to register artifacts."
+            )
         path = Path(artifact_path).resolve()
         if not path.exists():
             raise FileNotFoundError(f"Cannot register missing file: {path}")
@@ -188,6 +198,11 @@ class IntegrityManifest:
         Returns False if the manifest was modified outside of Chimera
         (e.g. an attacker updated a hash to match a tampered model).
         """
+        if self._key_invalid:
+            logger.critical(
+                "[integrity] Integrity key is corrupt or unreadable; manifest trust cannot be established."
+            )
+            return False
         if not self.manifest_path.exists():
             return True  # empty manifest is always valid
         try:
@@ -275,6 +290,10 @@ class IntegrityManifest:
 
     def _save(self) -> None:
         """Atomically save the manifest with a fresh HMAC signature."""
+        if self._key_invalid:
+            raise ValueError(
+                f"Integrity key is corrupt at {self.key_path}; refusing to save manifest."
+            )
         from chimera.engine.safe_io import atomic_write_text
         manifest_hmac = _compute_manifest_hmac(self._key, self._entries)
         data = {
@@ -309,6 +328,14 @@ class IntegrityManifest:
 
         stored_hmac = data.get("hmac", "")
         entries = data.get("entries", {})
+
+        if self._key_invalid:
+            self._entries = entries
+            logger.critical(
+                "[integrity] Loaded manifest entries without trust because the integrity key is corrupt."
+            )
+            return
+
         expected_hmac = _compute_manifest_hmac(self._key, entries)
 
         if stored_hmac and not hmac.compare_digest(stored_hmac, expected_hmac):

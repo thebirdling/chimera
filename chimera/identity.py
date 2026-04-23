@@ -22,6 +22,7 @@ import numpy as np
 from chimera._native.rust_graph import (
     ordered_takeover_sequence_progress,
     shared_pair_prior_counts,
+    shared_pair_recent_event_counts,
     shared_pair_recent_peer_counts,
 )
 from chimera.data_loader import AuthEvent
@@ -108,6 +109,7 @@ class IdentityResearchAnalyzer:
         "identity_shared_asn_users",
         "identity_shared_infra_pair_users",
         "identity_infra_burst_peer_count",
+        "identity_infra_burst_volume",
         "identity_session_concurrency",
         "identity_session_replay_burst",
         "identity_session_fingerprint_drift",
@@ -350,6 +352,7 @@ class IdentityResearchAnalyzer:
         indexed_events = sorted(enumerate(events), key=lambda item: (item[1].timestamp, item[0]))
         prior_infra_pair_users = self._compute_prior_infra_pair_users(indexed_events)
         infra_burst_peer_counts = self._compute_recent_infra_burst_peers(indexed_events)
+        infra_burst_event_counts = self._compute_recent_infra_burst_volume(indexed_events)
         takeover_sequence_progress = self._compute_takeover_sequence_progress(indexed_events)
 
         for sorted_index, (original_index, event) in enumerate(indexed_events):
@@ -383,6 +386,7 @@ class IdentityResearchAnalyzer:
                     recent_mfa_failures=state["recent_mfa_failures"],
                     shared_infra_pair_users=float(prior_infra_pair_users[sorted_index]),
                     infra_burst_peer_count=float(infra_burst_peer_counts[sorted_index]),
+                    infra_burst_event_count=float(infra_burst_event_counts[sorted_index]),
                     takeover_sequence_score=float(takeover_sequence_progress[sorted_index]),
                 )
             self._update_state(state, event, previous_event)
@@ -522,6 +526,7 @@ class IdentityResearchAnalyzer:
         recent_mfa_failures: dict[str, list[datetime]],
         shared_infra_pair_users: float,
         infra_burst_peer_count: float,
+        infra_burst_event_count: float,
         takeover_sequence_score: float,
     ) -> IdentitySignal:
         reasons: list[str] = []
@@ -791,6 +796,7 @@ class IdentityResearchAnalyzer:
                 + _clamp01((shared_infra_pair_users - 1.0) / self.max_shared_entity_users) * 0.15
                 + _clamp01(sync_peers / self.max_shared_entity_users) * 0.12
                 + _clamp01(infra_burst_peer_count / self.max_shared_entity_users) * 0.08
+                + _clamp01(infra_burst_event_count / (self.max_shared_entity_users * 2.0)) * 0.05
                 + fanout_score * 0.10
                 + password_spray_score * 0.12
                 + low_and_slow_score * 0.10
@@ -800,6 +806,7 @@ class IdentityResearchAnalyzer:
             password_spray_score * 0.45
             + low_and_slow_score * 0.35
             + _clamp01(sync_peers / self.max_shared_entity_users) * 0.10
+            + _clamp01(infra_burst_event_count / (self.max_shared_entity_users * 2.0)) * 0.05
             + fanout_score * 0.10
         )
         takeover_support = max(
@@ -922,6 +929,10 @@ class IdentityResearchAnalyzer:
             reasons.append(
                 "Multiple peer identities recently converged on the same infrastructure pair."
             )
+        if infra_burst_event_count >= 3:
+            reasons.append(
+                "The shared infrastructure pair accumulated a dense burst of causally adjacent events."
+            )
         if sync_peers > 0:
             reasons.append(
                 f"Observed {int(sync_peers)} synchronized peer identities in the same local window."
@@ -943,6 +954,7 @@ class IdentityResearchAnalyzer:
             "identity_shared_asn_users": shared_asn_users,
             "identity_shared_infra_pair_users": shared_infra_pair_users,
             "identity_infra_burst_peer_count": infra_burst_peer_count,
+            "identity_infra_burst_volume": float(infra_burst_event_count),
             "identity_session_concurrency": round(session_concurrency, 6),
             "identity_session_replay_burst": round(session_replay_burst, 6),
             "identity_session_fingerprint_drift": round(session_fingerprint_drift, 6),
@@ -1053,6 +1065,29 @@ class IdentityResearchAnalyzer:
         return shared_pair_recent_peer_counts(
             np.asarray(pair_codes, dtype=np.int64),
             np.asarray(user_codes, dtype=np.int64),
+            np.asarray(timestamps, dtype=np.int64),
+            window_seconds=max(int(self.relation_window.total_seconds()), 1),
+        )
+
+    def _compute_recent_infra_burst_volume(
+        self,
+        indexed_events: list[tuple[int, AuthEvent]],
+    ) -> np.ndarray:
+        pair_codes: list[int] = []
+        timestamps: list[int] = []
+        pair_encoder: dict[str, int] = {}
+        next_pair_code = 1
+
+        for _, event in indexed_events:
+            pair_key = self._infrastructure_pair_key(event)
+            if pair_key not in pair_encoder:
+                pair_encoder[pair_key] = next_pair_code
+                next_pair_code += 1
+            pair_codes.append(pair_encoder[pair_key])
+            timestamps.append(int(event.timestamp.timestamp()))
+
+        return shared_pair_recent_event_counts(
+            np.asarray(pair_codes, dtype=np.int64),
             np.asarray(timestamps, dtype=np.int64),
             window_seconds=max(int(self.relation_window.total_seconds()), 1),
         )

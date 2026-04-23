@@ -53,6 +53,7 @@ The benchmark outputs are designed to emphasize research usefulness:
 - disagreement entropy
 - contamination-shift robustness
 - representative explainability examples
+- case-level detection summaries
 
 Not every family will show the same lift profile. That is expected and should be reported honestly.
 

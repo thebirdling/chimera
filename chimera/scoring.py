@@ -267,6 +267,11 @@ class AnomalyScorer:
         # Get numeric features for scoring
         numeric_features = features_df.select_dtypes(include=[np.number])
         numeric_features = numeric_features.fillna(0)
+        if getattr(detector, "feature_names", None):
+            numeric_features = numeric_features.reindex(
+                columns=list(detector.feature_names),
+                fill_value=0,
+            )
         
         # Calculate anomaly scores
         scores = detector.score(numeric_features)

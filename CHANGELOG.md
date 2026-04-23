@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-04-15
+
+### Added
+
+- **Portable runtime API**: added a stable machine-facing API surface for `run_pipeline`, `run_benchmark`, `inspect_model`, and `doctor` so Chimera can be embedded cleanly before the first npm wrapper release.
+- **Stable output contracts**: major machine-facing commands now support versioned JSON envelopes and emit `artifact_manifest.json` files for wrapper-friendly artifact discovery.
+- **Case-level identity reasoning**: introduced deterministic `IdentityCase` aggregation for session takeover, password spray, low-and-slow, and coordinated identity campaign review.
+- **Doctor command**: added `chimera doctor` for runtime, dependency, integrity, config, and optional native-kernel diagnostics.
+- **Portable runtime docs**: added embedding, output schema, and install/smoke-test documentation for the pre-npm milestone.
+- **Portable runtime tests**: added contract, case aggregation, API/CLI parity, and artifact manifest coverage.
+
+### Changed
+
+- **Release versioning**: project metadata and runtime version are now aligned at `0.6.0`.
+- **Scoring compatibility**: detector scoring now reorders numeric features to match trained model feature order, which stabilizes verified-model detection flows.
+- **Configuration model**: added a `runtime_contract` section plus case-aggregation controls inside `identity_research`.
+- **Model defaults on Windows**: default high-level model config now uses `n_jobs=1` to avoid Windows permission failures in restricted environments.
+- **CLI package surface**: `chimera --version` now emits the cleaner `Chimera 0.6.0` style output expected from a packaged CLI.
+- **Doctor semantics**: optional native-kernel absence is now treated as healthy Python fallback behavior rather than a warning-worthy install failure.
+- **Native loader hardening**: optional Rust kernels now load only from expected Chimera artifact names instead of broad wildcard matching.
+
+### Security
+
+- **Agent artifact traversal hardening**: `agent-review` now ignores manifest paths that resolve outside the artifact directory.
+- **Agent artifact size guard**: deterministic analyst review now rejects oversized JSON artifacts to reduce local resource-exhaustion risk.
+- **Repo hygiene guardrails**: `.gitignore` now covers generated native kernel artifacts in addition to Rust target output.
+
 ## [0.5.1] - 2026-04-15
 
 ### Added

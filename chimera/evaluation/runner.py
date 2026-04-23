@@ -40,6 +40,9 @@ class BenchmarkResult:
     seed: int
     elapsed_seconds: float
     explainability_examples: list[dict[str, Any]]
+    chimera_threshold: float = 0.0
+    chimera_anomaly_mask: list[bool] | None = None
+    chimera_ensemble_scores: list[float] | None = None
 
     def summary_table(self) -> str:
         """Print a formatted comparison table."""
@@ -180,6 +183,9 @@ def run_benchmark(
         seed=seed,
         elapsed_seconds=elapsed,
         explainability_examples=[],
+        chimera_threshold=float(result.threshold),
+        chimera_anomaly_mask=result.anomaly_mask.astype(bool).tolist(),
+        chimera_ensemble_scores=result.ensemble_scores.astype(float).tolist(),
     )
 
     logger.info("[runner] Benchmark complete in %.2fs", elapsed)

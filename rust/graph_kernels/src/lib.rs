@@ -92,6 +92,45 @@ pub extern "C" fn shared_pair_recent_peer_counts(
 }
 
 #[no_mangle]
+pub extern "C" fn shared_pair_recent_event_counts(
+    pair_codes_ptr: *const i64,
+    timestamps_ptr: *const i64,
+    len: usize,
+    window_seconds: i64,
+    out_ptr: *mut i64,
+) {
+    if pair_codes_ptr.is_null() || timestamps_ptr.is_null() || out_ptr.is_null() {
+        return;
+    }
+
+    let pair_codes = unsafe { slice::from_raw_parts(pair_codes_ptr, len) };
+    let timestamps = unsafe { slice::from_raw_parts(timestamps_ptr, len) };
+    let out = unsafe { slice::from_raw_parts_mut(out_ptr, len) };
+
+    let mut left: usize = 0;
+    let mut active: HashMap<i64, i64> = HashMap::new();
+
+    for idx in 0..len {
+        let current_ts = timestamps[idx];
+        while left < idx && current_ts - timestamps[left] > window_seconds {
+            let expired_pair = pair_codes[left];
+            let remaining = active.get(&expired_pair).copied().unwrap_or(0) - 1;
+            if remaining > 0 {
+                active.insert(expired_pair, remaining);
+            } else {
+                active.remove(&expired_pair);
+            }
+            left += 1;
+        }
+
+        let current_pair = pair_codes[idx];
+        out[idx] = active.get(&current_pair).copied().unwrap_or(0);
+        let next_count = active.get(&current_pair).copied().unwrap_or(0) + 1;
+        active.insert(current_pair, next_count);
+    }
+}
+
+#[no_mangle]
 pub extern "C" fn ordered_takeover_sequence_progress(
     user_codes_ptr: *const i64,
     stage_codes_ptr: *const i64,

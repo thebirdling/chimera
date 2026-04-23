@@ -80,6 +80,15 @@ class OutputSection:
 
 
 @dataclass
+class RuntimeContractSection:
+    """Stable runtime contract settings for machine-facing consumers."""
+
+    json_stdout: bool = False
+    schema_version: str = "1.0"
+    write_artifact_manifest: bool = True
+
+
+@dataclass
 class WatchSection:
     """File watching configuration for continuous detection."""
 
@@ -190,6 +199,8 @@ class IdentityResearchSection:
     fusion_hard_floor: float = 0.35
     takeover_hard_floor: float = 0.58
     takeover_support_floor: float = 0.55
+    case_aggregation_enabled: bool = True
+    case_time_window_minutes: int = 30
 
 
 @dataclass
@@ -205,6 +216,7 @@ class ChimeraConfig:
     rules: RulesSection = field(default_factory=RulesSection)
     scoring: ScoringSection = field(default_factory=ScoringSection)
     output: OutputSection = field(default_factory=OutputSection)
+    runtime_contract: RuntimeContractSection = field(default_factory=RuntimeContractSection)
     watch: WatchSection = field(default_factory=WatchSection)
     # v0.3 engine sections
     normalization: NormalizationSection = field(default_factory=NormalizationSection)
@@ -290,6 +302,11 @@ class ChimeraConfig:
             for k, v in data["watch"].items():
                 if hasattr(config.watch, k):
                     setattr(config.watch, k, v)
+
+        if "runtime_contract" in data:
+            for k, v in data["runtime_contract"].items():
+                if hasattr(config.runtime_contract, k):
+                    setattr(config.runtime_contract, k, v)
 
         if "normalization" in data:
             for k, v in data["normalization"].items():
@@ -420,6 +437,11 @@ class ChimeraConfig:
                 "pattern": self.watch.pattern,
                 "recursive": self.watch.recursive,
             },
+            "runtime_contract": {
+                "json_stdout": self.runtime_contract.json_stdout,
+                "schema_version": self.runtime_contract.schema_version,
+                "write_artifact_manifest": self.runtime_contract.write_artifact_manifest,
+            },
             "normalization": {
                 "strategy": self.normalization.strategy,
                 "low_variance_threshold": self.normalization.low_variance_threshold,
@@ -467,6 +489,8 @@ class ChimeraConfig:
                 "fusion_hard_floor": self.identity_research.fusion_hard_floor,
                 "takeover_hard_floor": self.identity_research.takeover_hard_floor,
                 "takeover_support_floor": self.identity_research.takeover_support_floor,
+                "case_aggregation_enabled": self.identity_research.case_aggregation_enabled,
+                "case_time_window_minutes": self.identity_research.case_time_window_minutes,
             },
             "seed": self.seed,
         }

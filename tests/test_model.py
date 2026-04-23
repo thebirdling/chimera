@@ -8,6 +8,7 @@ import pytest
 import numpy as np
 import pandas as pd
 
+from chimera.engine.integrity import IntegrityManifest
 from chimera.model import AnomalyDetector, ModelConfig, ModelMetadata
 
 
@@ -114,10 +115,11 @@ class TestAnomalyDetector:
         
         with tempfile.TemporaryDirectory() as tmpdir:
             model_path = Path(tmpdir) / "test_model.joblib"
-            detector.save(model_path)
+            manifest = IntegrityManifest(Path(tmpdir) / "integrity_manifest.json")
+            detector.save(model_path, manifest=manifest)
             
             # Load model
-            loaded = AnomalyDetector.load(model_path)
+            loaded = AnomalyDetector.load(model_path, manifest=manifest)
             
             assert loaded._is_fitted is True
             assert loaded.feature_names == ["feature_a", "feature_b"]

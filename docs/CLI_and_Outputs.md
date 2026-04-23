@@ -11,11 +11,12 @@ The CLI is intended to feel:
 - explainable
 - consistent across training, scoring, and benchmarking
 
-In v0.5.1 the CLI also has stronger presentation:
+In v0.6.0 the CLI also has stronger presentation:
 
 - branded ASCII startup banners
 - lightweight loading animations
 - clearer stage transitions during longer workflows
+- package-friendly JSON mode that keeps machine output on stdout and live presentation on stderr
 
 ## 2. Core Commands
 
@@ -101,6 +102,32 @@ Typical usage:
 chimera bench-lanl --config chimera.yaml --input auth.txt --limit 50000
 ```
 
+### 2.7 `chimera doctor`
+
+Purpose:
+
+- validate runtime health for portable embedding and future wrapper use
+
+Typical usage:
+
+```bash
+chimera doctor
+chimera doctor --json
+```
+
+### 2.8 `chimera agent-review`
+
+Purpose:
+
+- generate a deterministic offline analyst summary from a Chimera artifact or output directory
+
+Typical usage:
+
+```bash
+chimera agent-review --input ./chimera_output
+chimera agent-review --input ./chimera_output --output ./chimera_agent_review --json
+```
+
 ## 3. Supporting Commands
 
 Other commands support surrounding workflows:
@@ -112,6 +139,7 @@ Other commands support surrounding workflows:
 - `chimera baseline`
 - `chimera watch`
 - `chimera info`
+- `chimera agent-review`
 
 These help inspect, package, or operationalize results without changing the project’s research-first orientation.
 
@@ -140,6 +168,7 @@ Produced during `bench` and `bench-lanl`:
 - `bench_report.json`
 - `bench_report.md`
 - suite summaries for multi-run workflows
+- `artifact_manifest.json`
 
 ## 5. Why Markdown Reports Matter
 
@@ -164,6 +193,20 @@ Depending on the path and config, outputs may include channels such as:
 - `identity_low_and_slow_score`
 - `identity_takeover_sequence_score`
 - `identity_takeover_score`
+
+Portable runtime envelopes may also include:
+
+- `cases`
+- `case_summary`
+- `case_metrics`
+- `artifacts`
+
+Agent-review envelopes include:
+
+- `review`
+- analyst posture
+- top cases
+- recommendation list
 
 These exist so the identity layer can be studied directly rather than hidden inside a single fused score.
 
@@ -208,5 +251,6 @@ The CLI should help Chimera feel like a serious research package:
 - explainable outputs
 - reproducible artifacts
 - enough visual identity to feel intentional
+- a stable machine-facing contract for wrapper consumers
 
-That is why v0.5.1 includes stronger command-line presentation without turning the tool into a noisy or theatrical shell app.
+That is why v0.6.0 includes stronger command-line presentation without turning the tool into a noisy or theatrical shell app.

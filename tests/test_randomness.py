@@ -2,6 +2,7 @@
 import pytest
 import numpy as np
 import pandas as pd
+from chimera.engine.integrity import IntegrityManifest
 from chimera.registry import DetectorRegistry
 from chimera.detectors.ensemble import EnsembleDetector, EnsembleConfig
 
@@ -57,10 +58,11 @@ def test_ensemble_persistence_consistency(synthetic_data, tmp_path):
     
     # Save
     path = tmp_path / "model.joblib"
-    det.save(path)
-    
+    manifest = IntegrityManifest(tmp_path / "integrity_manifest.json")
+    det.save(path, manifest=manifest)
+
     # Load
-    det_loaded = EnsembleDetector.load(path)
+    det_loaded = EnsembleDetector.load(path, manifest=manifest)
     scores_post = det_loaded.score(synthetic_data)
     
     np.testing.assert_array_almost_equal(scores_pre, scores_post, decimal=6,

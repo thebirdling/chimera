@@ -6,7 +6,7 @@ learning and deterministic rules to identify suspicious authentication
 patterns without requiring labeled data.
 """
 
-__version__ = "0.5.1"
+__version__ = "0.6.0"
 __author__ = "Chimera Contributors"
 __license__ = "MIT"
 
@@ -16,6 +16,9 @@ from chimera.feature_engineering import FeatureEngineer, UserBehaviorProfile
 from chimera.model import AnomalyDetector, ModelConfig
 from chimera.scoring import AnomalyScorer, AnomalyResult, UserSummary
 from chimera.reporting import ReportGenerator
+from chimera.agent import AgentReview
+from chimera.cases import IdentityCase
+from chimera.api import run_pipeline, run_benchmark, inspect_model, doctor, review_artifact
 
 # v0.2 components
 from chimera.registry import DetectorRegistry
@@ -41,6 +44,13 @@ __all__ = [
     "AnomalyResult",
     "UserSummary",
     "ReportGenerator",
+    "AgentReview",
+    "IdentityCase",
+    "run_pipeline",
+    "run_benchmark",
+    "inspect_model",
+    "doctor",
+    "review_artifact",
     # v0.2
     "DetectorRegistry",
     "ChimeraConfig",

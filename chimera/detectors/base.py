@@ -36,7 +36,7 @@ class DetectorConfig:
 
     scaler_type: str = "standard"  # "standard" or "robust"
     random_state: int = 42
-    n_jobs: int = -1
+    n_jobs: int = 1
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize config to dictionary."""

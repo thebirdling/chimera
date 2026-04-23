@@ -14,6 +14,10 @@ That shift changes Chimera from a detector bundle into a research platform with 
 - model identity behavior using deterministic sequence and relationship features
 - evaluate those ideas rigorously with reproducible attack injection and benchmark reporting
 
+The v0.6.0 phase adds a parallel packaging objective:
+
+- make the research runtime portable enough to support embedding and a future npm/npx wrapper without rewriting the core engine
+
 ## 2. Current Subsystem Roles
 
 ### 2.1 Ingestion
@@ -191,6 +195,7 @@ Current role:
 - inject deterministic identity attack families
 - compare baseline and Chimera scoring paths
 - output JSON and Markdown benchmark artifacts
+- report case-level summaries in addition to event-level metrics
 
 Current status:
 
@@ -252,6 +257,29 @@ Design rule:
 
 - every native path must preserve a Python fallback so default installation remains viable
 
+### 2.10 Portable Runtime Layer
+
+Primary files:
+
+- `chimera/api.py`
+- `chimera/contracts.py`
+- `chimera/cases.py`
+
+Current role:
+
+- provide stable machine-facing JSON envelopes
+- write artifact manifests for output discovery
+- expose wrapper-friendly programmatic entrypoints
+- aggregate event-level findings into case-level objects
+
+Current status:
+
+- implemented in v0.6.0 as the pre-npm bridge
+
+Strategic significance:
+
+- this layer is what allows Chimera to remain Python-first while becoming distribution-ready for a future npm/npx wrapper
+
 ## 3. Implemented vs Partial vs Artifact-Only
 
 ### 3.1 Implemented in Code
@@ -264,9 +292,11 @@ Design rule:
 - identity relationship features
 - campaign heuristics
 - ordered takeover progression scoring
+- deterministic identity case aggregation
 - synthetic evaluation harness
 - LANL benchmark support
 - Markdown benchmark reporting
+- stable machine-facing envelopes and artifact manifests
 
 ### 3.2 Partially Implemented
 

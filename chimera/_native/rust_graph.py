@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import ctypes
 import logging
+import re
 from pathlib import Path
 
 import numpy as np
@@ -19,16 +20,43 @@ logger = logging.getLogger(__name__)
 
 RUST_GRAPH_AVAILABLE = False
 RUST_GRAPH_BURST_AVAILABLE = False
+RUST_GRAPH_BURST_VOLUME_AVAILABLE = False
 RUST_GRAPH_SEQUENCE_AVAILABLE = False
 _graph_lib = None
 
 _NATIVE_DIR = Path(__file__).parent
-for candidate in [
-    "rust_graph_kernels.dll",
-    "librust_graph_kernels.so",
-    "librust_graph_kernels.dylib",
-]:
-    lib_path = _NATIVE_DIR / candidate
+_ALLOWED_NATIVE_PATTERNS = (
+    re.compile(r"^rust_graph_kernels(?:-\d+)?\.dll$"),
+    re.compile(r"^librust_graph_kernels(?:-\d+)?\.so$"),
+    re.compile(r"^librust_graph_kernels(?:-\d+)?\.dylib$"),
+)
+
+
+def _is_allowed_native_artifact_name(name: str) -> bool:
+    return any(pattern.match(name) for pattern in _ALLOWED_NATIVE_PATTERNS)
+
+
+def _native_candidate_paths() -> list[Path]:
+    exact_names = [
+        _NATIVE_DIR / "rust_graph_kernels.dll",
+        _NATIVE_DIR / "librust_graph_kernels.so",
+        _NATIVE_DIR / "librust_graph_kernels.dylib",
+    ]
+    versioned = sorted(
+        [
+            path
+            for path in _NATIVE_DIR.iterdir()
+            if path.is_file() and _is_allowed_native_artifact_name(path.name) and path not in exact_names
+        ],
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
+    )
+    return [path for path in exact_names if path.exists()] + versioned
+
+
+_candidate_paths = _native_candidate_paths()
+for lib_path in _candidate_paths:
+    candidate = lib_path.name
     if lib_path.exists():
         try:
             _graph_lib = ctypes.CDLL(str(lib_path))
@@ -54,6 +82,21 @@ for candidate in [
             except AttributeError:
                 logger.debug(
                     "[rust-graph] Burst kernel symbol unavailable in %s; falling back to Python.",
+                    candidate,
+                )
+            try:
+                _graph_lib.shared_pair_recent_event_counts.argtypes = [
+                    ctypes.POINTER(ctypes.c_longlong),
+                    ctypes.POINTER(ctypes.c_longlong),
+                    ctypes.c_size_t,
+                    ctypes.c_longlong,
+                    ctypes.POINTER(ctypes.c_longlong),
+                ]
+                _graph_lib.shared_pair_recent_event_counts.restype = None
+                globals()["RUST_GRAPH_BURST_VOLUME_AVAILABLE"] = True
+            except AttributeError:
+                logger.debug(
+                    "[rust-graph] Burst-volume kernel symbol unavailable in %s; falling back to Python.",
                     candidate,
                 )
             try:
@@ -177,6 +220,49 @@ def shared_pair_recent_peer_counts(
         out[idx] = max(len(user_counts) - (1 if current_user in user_counts else 0), 0)
         mutable_counts = pair_user_counts.setdefault(current_pair, {})
         mutable_counts[current_user] = mutable_counts.get(current_user, 0) + 1
+    return out
+
+
+def shared_pair_recent_event_counts(
+    pair_codes: np.ndarray,
+    timestamps: np.ndarray,
+    *,
+    window_seconds: int,
+) -> np.ndarray:
+    """Count prior events sharing the same pair code within a local causal window."""
+    pair_codes = np.asarray(pair_codes, dtype=np.int64, order="C")
+    timestamps = np.asarray(timestamps, dtype=np.int64, order="C")
+    if pair_codes.shape != timestamps.shape:
+        raise ValueError("pair_codes and timestamps must have the same shape")
+
+    out = np.zeros(pair_codes.shape[0], dtype=np.int64, order="C")
+    if RUST_GRAPH_BURST_VOLUME_AVAILABLE and _graph_lib is not None:
+        _graph_lib.shared_pair_recent_event_counts(
+            pair_codes.ctypes.data_as(ctypes.POINTER(ctypes.c_longlong)),
+            timestamps.ctypes.data_as(ctypes.POINTER(ctypes.c_longlong)),
+            ctypes.c_size_t(pair_codes.shape[0]),
+            ctypes.c_longlong(int(window_seconds)),
+            out.ctypes.data_as(ctypes.POINTER(ctypes.c_longlong)),
+        )
+        return out
+
+    window_seconds = int(window_seconds)
+    left = 0
+    pair_counts: dict[int, int] = {}
+    for idx, (pair_code, ts) in enumerate(zip(pair_codes, timestamps)):
+        current_ts = int(ts)
+        while left < idx and current_ts - int(timestamps[left]) > window_seconds:
+            expired_pair = int(pair_codes[left])
+            remaining = pair_counts.get(expired_pair, 0) - 1
+            if remaining > 0:
+                pair_counts[expired_pair] = remaining
+            else:
+                pair_counts.pop(expired_pair, None)
+            left += 1
+
+        current_pair = int(pair_code)
+        out[idx] = pair_counts.get(current_pair, 0)
+        pair_counts[current_pair] = pair_counts.get(current_pair, 0) + 1
     return out
 
 
